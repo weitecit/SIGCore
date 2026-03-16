@@ -6,7 +6,6 @@ ROOT_FOLDER = Path(os.path.dirname(os.path.abspath(__file__))).parent
 CONFIG_PATH = ROOT_FOLDER / "config.yaml"
 
 LOGS_FOLDER = ROOT_FOLDER / "logs"
-PROVINCES_FOLDER = ROOT_FOLDER / 'Provinces'
 ASSETS_FOLDER = ROOT_FOLDER / 'Assets'
 
 with open(CONFIG_PATH, "r") as f:
@@ -21,7 +20,6 @@ SIGPAC_YEAR = config_file.get('SIGPAC_YEAR', 2023)
 COG_PROFILE = config_file.get('COG_PROFILE', 'webp')
 
 os.makedirs(LOGS_FOLDER, exist_ok=True)
-os.makedirs(PROVINCES_FOLDER, exist_ok=True)
 os.makedirs(ASSETS_FOLDER, exist_ok=True)
 
 print('ENVIRONMENT set to ->', ENVIRONMENT)

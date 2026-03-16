@@ -4,12 +4,10 @@ from concurrent.futures import ThreadPoolExecutor
 import pandas as pd
 import geopandas as gpd
 import requests
+from pyproj import Transformer
 from shapely.geometry.point import Point
 
 from config import REQUIRED_COLUMNS, ASSETS_FOLDER
-
-province_df = pd.read_csv(ASSETS_FOLDER/'sigpac_provinces.csv')
-
 
 def polygonize_data_parallel(
     input_data: str | dict | pd.DataFrame,
@@ -89,7 +87,14 @@ def polygonize_data_parallel(
     print('DONE!')
     if len(out_data) > 0 and 'field' in out_data.columns:
         print('Fields detected: ', len(out_data['field'].unique()), out_data['field'].unique())
-        out_data.crs = 'EPSG:4258'
+        if out_data.crs is None:
+            out_data = out_data.set_crs('EPSG:4258')
+        else:
+            try:
+                if out_data.crs.to_epsg() != 4258:
+                    out_data = out_data.to_crs('EPSG:4258')
+            except Exception:
+                out_data = out_data.to_crs('EPSG:4258')
     print(f'Total: {len(out_data)} plots')
     print('Errors: ', len(error_df))
 
@@ -122,7 +127,14 @@ def get_siar_stations(point:Point = None, n_nearest:int=None)->gpd.GeoDataFrame:
     stations_gdf = stations_gdf[stations_gdf['Estado']=='Activa'].reset_index()
     if not point: return stations_gdf
 
-    stations_gdf['distance'] = stations_gdf.distance(point)
+    if stations_gdf.crs is not None and getattr(stations_gdf.crs, 'is_geographic', False):
+        transformer = Transformer.from_crs(stations_gdf.crs, 'EPSG:3857', always_xy=True)
+        x, y = transformer.transform(point.x, point.y)
+        point_3857 = Point(x, y)
+        stations_proj = stations_gdf.to_crs('EPSG:3857')
+        stations_gdf['distance'] = stations_proj.distance(point_3857)
+    else:
+        stations_gdf['distance'] = stations_gdf.distance(point)
     if not n_nearest: return stations_gdf
 
     sorted_gdf = stations_gdf.sort_values('distance', ascending=True)

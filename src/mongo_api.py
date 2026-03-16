@@ -1,5 +1,5 @@
 from pymongo import MongoClient
-from catastro import polygonize_data, open_data
+from catastro import polygonize_data_parallel, open_data
 from pymongo.errors import BulkWriteError
 import geopandas as gpd
 from shapely.geometry import shape, Point
@@ -44,7 +44,7 @@ def upload_plots_from_xls(xls_path: str, override_fields: bool = False, parcel_n
     else:
         polygonize_input = xls_path
 
-    main_df, error_df = polygonize_data(polygonize_input)
+    main_df, error_df = polygonize_data_parallel(polygonize_input)
     
     print(f"❌ Invalid records in SIGPAC: {len(error_df)}")
     
@@ -66,8 +66,6 @@ def upload_plotlist_from_dataframe(main_df: gpd.GeoDataFrame, override_fields: b
     # Rename 'field' to 'parcel' if needed (for backward compatibility)
     if 'field' in main_df.columns and 'parcel' not in main_df.columns:
         main_df = main_df.rename(columns={'field': 'parcel'})
-
-
 
     if override_fields:
         parcels = main_df['parcel'].unique()
