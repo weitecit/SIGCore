@@ -1,0 +1,12 @@
+pandas==2.2.3
+fastapi==0.114.1
+geopandas==1.1.1
+numpy==2.0.0
+pytest==8.3.3
+pytest-mock==3.14.1
+mongomock==4.3.0
+PyYAML==6.0.2
+requests==2.32.3
+tqdm==4.66.5
+uvicorn==0.32.0
+pymongo==4.8.0
