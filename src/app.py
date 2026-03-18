@@ -1,4 +1,0 @@
-"""
-Main application module.
-"""
-

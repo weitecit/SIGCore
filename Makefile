@@ -1,9 +1,8 @@
-.PHONY: help install install-dev test lint format clean run
+.PHONY: help install test lint format clean run
 
 help:
 	@echo "Available commands:"
 	@echo "  install     Install production dependencies"
-	@echo "  install-dev Install development dependencies"
 	@echo "  test        Run tests"
 	@echo "  lint        Run linting"
 	@echo "  format      Format code"
@@ -12,9 +11,6 @@ help:
 
 install:
 	pip install -r requirements.txt
-
-install-dev:
-	pip install -r requirements-dev.txt
 
 test:
 	pytest

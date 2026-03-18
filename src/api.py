@@ -31,9 +31,9 @@ async def lifespan(_: FastAPI):
         )
     yield
 
-#=======
+#==============
 #API Endpoints
-#=======
+#==============
 app = FastAPI(title="SIGCore API", lifespan=lifespan)
 
 @app.get("/health")

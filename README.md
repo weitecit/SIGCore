@@ -20,10 +20,10 @@
 ```
 .
 ├── main.py              # Entry point
-├── src/                 # Source code
-│   ├── __init__.py
-│   └── app.py          # Main application logic
-├── tests/               # Test files
+├── src/
+    ├── tests/           # Test files
+    ├── __init__.py
+    └── app.py          # Main application logic
 ├── requirements.txt     # Production dependencies
 └── README.md           # This file
 ```

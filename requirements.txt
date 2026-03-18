@@ -10,4 +10,4 @@ requests==2.32.3
 tqdm==4.66.5
 uvicorn==0.32.0
 pymongo==4.8.0
-openpyxl==3.1.5
+openpyxl==3.1.5 #es posible que no haga falta
