@@ -10,15 +10,10 @@ import math
 
 client = MongoClient(MONGO_STRING)
 db = client['main']
-
 SYSTEM_TOKEN = "66a7a3c2fef995522871a9a0"
-
-def get_user_log(user_id: str = SYSTEM_TOKEN) -> dict:
-    return {
-        "user_id": user_id,
-        "name": "System",
-        "date": datetime.now()
-    }
+#=====================================
+# EXCEPTIONS
+#=====================================
 
 class FieldNotFound(Exception):
     pass
@@ -31,6 +26,10 @@ class NoAlertsFound(Exception):
 
 class NoWeatherFound(Exception):
     pass
+
+#=====================================
+# MAIN FUNCTIONS
+#=====================================
 
 def upload_plots_from_xls(xls_path: str, override_fields: bool = False, parcel_name:str = None) -> gpd.GeoDataFrame:
     """
@@ -78,8 +77,8 @@ def upload_plotlist_from_dataframe(main_df: gpd.GeoDataFrame, override_fields: b
                 print(f"⚠️ {str(e)}")
                 continue
 
-    features = gdf_to_mongo_structure(main_df)
-    new_features = check_plots_duplicated(features)
+    features = _gdf_to_mongo_structure(main_df)
+    new_features = _check_plots_duplicated(features)
 
     try:
         if new_features is not None and len(new_features) > 0:
@@ -91,130 +90,6 @@ def upload_plotlist_from_dataframe(main_df: gpd.GeoDataFrame, override_fields: b
     except BulkWriteError as e:
         print(f"❌❌ Insert failed with {len(e.details['writeErrors'])} errors")
 
-def find_plots_by_parcel(parcel_criteria:dict)->list:
-    return list(db.plots.find({'$or': parcel_criteria}, {
-        'properties.provincia': 1,
-        'properties.municipio': 1,
-        'properties.parcela': 1,
-        'properties.recinto': 1,
-        '_id': 0
-    }))
-
-def check_plots_duplicated(features: list[dict]) -> list[dict]:
-    """ Performs a OR-query to fetch existing matches, then filters the input. """
-
-    if not features:
-        print("🟡 Duplicates skipped: 0")
-        return []
-
-    # Build unique criteria to keep the $or query compact
-    keys = [
-        (
-            f['properties']['provincia'],
-            f['properties']['municipio'],
-            f['properties']['parcela'],
-            f['properties']['recinto'],
-        )
-        for f in features
-    ]
-
-    unique_keys = set(keys)
-    query_criteria = [
-        {
-            'properties.provincia': k[0],
-            'properties.municipio': k[1],
-            'properties.parcela': k[2],
-            'properties.recinto': k[3],
-        }
-        for k in unique_keys
-    ]
-
-    existing = find_plots_by_parcel(query_criteria) if query_criteria else []
-    existing_set = set(
-        (
-            e['properties']['provincia'],
-            e['properties']['municipio'],
-            e['properties']['parcela'],
-            e['properties']['recinto'],
-        )
-        for e in existing
-    )
-
-    no_duplicated_features = [
-        f for f, k in zip(features, keys) if k not in existing_set
-    ]
-
-    n_duplicates = len(features) - len(no_duplicated_features) if features else 0
-    print(f"🟡 Duplicates skipped: {n_duplicates}")
-    return no_duplicated_features
-
-def gdf_to_mongo_structure(main_df:gpd.GeoDataFrame)->list[dict]:
-    has_parcel = 'parcel' in main_df.columns
-    has_parcel_id = 'parcel_id' in main_df.columns
-
-    # Check if CRS is set
-    if main_df.crs is None:
-        raise Exception("The GeoDataframe has no CRS")
-
-    # Convert to 4326 for MongoDB if not already
-    try:
-        if main_df.crs.is_projected or main_df.crs.to_epsg() != 4326:
-            print(f"🔄 Converting to EPSG:4326")
-            main_df = main_df.to_crs("EPSG:4326")
-    except AttributeError:
-        # If crs doesn't have to_epsg or is_projected, just try to_crs
-        main_df = main_df.to_crs("EPSG:4326")
-    except Exception as e:
-        print(f"Warning during CRS conversion: {e}")
-        # Continue anyway if it's already in a compatible format or let it fail if absolutely necessary
-    
-    # Keep the original UTM coordinates
-    mongo_fields_dict = {}
-    fields_found_in_mongo = []
-    
-    # Filter plots that have a valid field
-    if has_parcel and not has_parcel_id:
-        # Get field information from MongoDB
-        for parcel in main_df['parcel'].unique():
-            try:
-                result = get_parcel_id(parcel)
-                mongo_fields_dict[parcel] = result
-                fields_found_in_mongo.append(parcel)
-            except FieldNotFound:
-                print(f"⚠️ Field '{parcel}' not found in database")
-                continue
-            
-        filtered_df = main_df[main_df['parcel'].isin(fields_found_in_mongo)]
-
-        print(f"✅ Valid plots found: {len(filtered_df)}")
-        print(f"\t {fields_found_in_mongo}")
-        print(f"⚠️ Plots with no field found: {len(main_df) - len(filtered_df)}")
-        print(f"\t {set(main_df['parcel'].unique()) - set(fields_found_in_mongo)}")
-    else:
-        filtered_df = main_df
-
-    # Create separate features with UTM coordinates
-    features = []
-    for _, row in filtered_df.iterrows():
-        feature = {
-            "type": "Feature",
-            "geometry": row["geometry"].__geo_interface__,  # This will use UTM coordinates
-            "properties": row.drop("geometry").to_dict(),
-            "crs": {
-                "type": "name",
-                "properties": {
-                    "name": "EPSG:4326"
-                }
-            }
-        }
-        if has_parcel and not has_parcel_id:    
-            feature["properties"]["parcel_id"] = str(mongo_fields_dict[row["parcel"]])
-            feature["properties"]["parcel"] = row["parcel"].lower()
-        
-        features.append(apply_base_model(feature))
-
-    return features
-
 def find_field_plots(field_name:str|None=None)->list[dict]:
         if field_name is None:
             return list(db.plots.find())
@@ -225,17 +100,15 @@ def get_parcelario(field_name:str|None=None, only_operating=True)->gpd.GeoDataFr
     features = find_field_plots(field_name)
     if len(features)<=0:
         raise FieldNotFound(f"Field '{field_name}' not found in database")
-    gdf = mongo_to_gdf(features).to_crs(4258)
+    gdf = _mongo_to_gdf(features).to_crs(4258)
     return gdf[gdf['operating']] if only_operating else gdf
 
 def get_parcelario_by_id(parcel_id:str, only_operating:bool=True)->gpd.GeoDataFrame:
     result = db.plots.find({'properties.parcel_id':parcel_id})
     features = list(result)
     if len(features) <= 0:
-        error_msg = f"Parcel '{parcel_id}' not found in database"
-        print(error_msg)
-        raise FieldNotFound(error_msg)
-    gdf = mongo_to_gdf(features).to_crs(4258)
+        raise FieldNotFound(f"Parcel '{parcel_id}' not found in database")
+    gdf = _mongo_to_gdf(features).to_crs(4258)
     return gdf[gdf['operating']] if only_operating else gdf
 
 #TODO: no se necesita traer todo el parcelario. Se podría hacer una búsqueda más eficiente dado un polígono o extent.
@@ -249,13 +122,6 @@ def get_parcelario_by_extent(extent:tuple, source_crs:str|int = 4258)->gpd.GeoDa
 def get_parcel_centroid(parcel_id, crs:str|int=32630)->Point:
     union = get_parcelario_by_id(parcel_id).to_crs(crs).union_all()
     return union.centroid
-
-def mongo_to_gdf(features:list[dict])->gpd.GeoDataFrame:
-    #TODO: check CRS
-    properties_list = [f['properties'] for f in features]
-    geometries = [shape(f['geometry']) for f in features]
-    gdf = gpd.GeoDataFrame(properties_list, geometry=geometries, crs = 4326)
-    return gdf
 
 def get_parcel_id(parcel_name:str)->str:
     result = db.parcels.find_one({'name':{'$regex': '^' + str(parcel_name) + '$', '$options': 'i'}})
@@ -378,8 +244,158 @@ def get_alerts_gdf(parcel_id:str, week:int=None, year:int=None)->gpd.GeoDataFram
     crs = 'epsg:32630' if len(alerts_result)>0 else None
     return gpd.GeoDataFrame(alerts_result, columns=['level', 'group', 'title', 'week', 'year', 'geometry'], crs=crs)
 
-def apply_base_model(doc: dict, user_id: str = SYSTEM_TOKEN) -> dict:
-    u_log = get_user_log(user_id)
+def get_reports(parcel_id:str, week:int=None, year:int=None)->list:
+    query = {'space_id':parcel_id, 'block_type':'report'}
+    if week: query['properties.week'] = week
+    if year: query['properties.year'] = year
+
+    query_result = db.blocks.find(query)
+    results = list(query_result)
+
+    if len(results)<=0:
+        raise NoReportsFound(f"No reports found for parcel {parcel_id} and week {week} and year {year}")
+
+    return results
+
+def get_report_path(parcel_id:str, week:int=None, year:int=None)->list:
+    reports = get_reports(parcel_id, week, year)
+    paths = [f"maps/{r['repo_id']}/{r['space_id']}/{r['_id']}" for r in reports]
+    return paths
+
+def get_weather(parcel_id:str, week:int=None, year:int=None)->gpd.GeoDataFrame:
+    query = {'block_type':'weather', 'space_id':parcel_id}
+    if week: query['properties.week'] = week
+    if year: query['properties.year'] = year
+    result = list(db.blocks.find(query))
+    if len(result) == 0:
+        raise NoWeatherFound(f"No weather data found for parcel {parcel_id} and week {week} and year {year}")
+    return result
+
+def get_weather_last(parcel_id:str)->gpd.GeoDataFrame:
+    query = {'block_type':'weather', 'space_id':parcel_id}
+    result = db.blocks.find_one(query, sort=[('properties.date', -1)])
+    if result is None:
+        raise NoWeatherFound(f"No weather data found for parcel {parcel_id}")
+    return result
+
+def save_kpis(kpi_data: list[dict]):
+    if not kpi_data:
+        return
+    
+    # Ensure date is a datetime object
+    for item in kpi_data:
+        if 'created_at' not in item:
+            item['created_at'] = datetime.now()
+        if 'updated_at' not in item:
+            item['updated_at'] = datetime.now()
+            
+        # Inject BaseModel and UserLogs matching the Go struct
+        _apply_base_model(item)
+
+    db.kpis.insert_many(kpi_data)
+
+def get_block(block_id:str|ObjectId)->dict:
+    try:
+        if isinstance(block_id, str):
+            oid = ObjectId(block_id)
+        else:
+            oid = block_id
+            
+        result = db.blocks.find_one({'_id':oid})
+        if result is None:
+            raise FieldNotFound(f"Block '{block_id}' not found")
+        return result
+    except Exception as e:
+        # If not a valid ObjectId or other error
+        raise FieldNotFound(f"Invalid block ID or not found: {block_id}. Error: {e}")
+
+
+#=====================================
+# UTILS
+#=====================================
+def _get_user_log(user_id: str = SYSTEM_TOKEN) -> dict:
+    return {
+        "user_id": user_id,
+        "name": "System",
+        "date": datetime.now()
+    }
+
+def _mongo_to_gdf(features:list[dict])->gpd.GeoDataFrame:
+    #TODO: check CRS
+    properties_list = [f['properties'] for f in features]
+    geometries = [shape(f['geometry']) for f in features]
+    gdf = gpd.GeoDataFrame(properties_list, geometry=geometries, crs = 4326)
+    return gdf
+
+def _gdf_to_mongo_structure(main_df:gpd.GeoDataFrame)->list[dict]:
+    has_parcel = 'parcel' in main_df.columns
+    has_parcel_id = 'parcel_id' in main_df.columns
+
+    # Check if CRS is set
+    if main_df.crs is None:
+        raise Exception("The GeoDataframe has no CRS")
+
+    # Convert to 4326 for MongoDB if not already
+    try:
+        if main_df.crs.is_projected or main_df.crs.to_epsg() != 4326:
+            print(f"🔄 Converting to EPSG:4326")
+            main_df = main_df.to_crs("EPSG:4326")
+    except AttributeError:
+        # If crs doesn't have to_epsg or is_projected, just try to_crs
+        main_df = main_df.to_crs("EPSG:4326")
+    except Exception as e:
+        print(f"Warning during CRS conversion: {e}")
+        # Continue anyway if it's already in a compatible format or let it fail if absolutely necessary
+    
+    # Keep the original UTM coordinates
+    mongo_fields_dict = {}
+    fields_found_in_mongo = []
+    
+    # Filter plots that have a valid field
+    if has_parcel and not has_parcel_id:
+        # Get field information from MongoDB
+        for parcel in main_df['parcel'].unique():
+            try:
+                result = get_parcel_id(parcel)
+                mongo_fields_dict[parcel] = result
+                fields_found_in_mongo.append(parcel)
+            except FieldNotFound:
+                print(f"⚠️ Field '{parcel}' not found in database")
+                continue
+            
+        filtered_df = main_df[main_df['parcel'].isin(fields_found_in_mongo)]
+
+        print(f"✅ Valid plots found: {len(filtered_df)}")
+        print(f"\t {fields_found_in_mongo}")
+        print(f"⚠️ Plots with no field found: {len(main_df) - len(filtered_df)}")
+        print(f"\t {set(main_df['parcel'].unique()) - set(fields_found_in_mongo)}")
+    else:
+        filtered_df = main_df
+
+    # Create separate features with UTM coordinates
+    features = []
+    for _, row in filtered_df.iterrows():
+        feature = {
+            "type": "Feature",
+            "geometry": row["geometry"].__geo_interface__,  # This will use UTM coordinates
+            "properties": row.drop("geometry").to_dict(),
+            "crs": {
+                "type": "name",
+                "properties": {
+                    "name": "EPSG:4326"
+                }
+            }
+        }
+        if has_parcel and not has_parcel_id:    
+            feature["properties"]["parcel_id"] = str(mongo_fields_dict[row["parcel"]])
+            feature["properties"]["parcel"] = row["parcel"].lower()
+        
+        features.append(_apply_base_model(feature))
+
+    return features
+
+def _apply_base_model(doc: dict, user_id: str = SYSTEM_TOKEN) -> dict:
+    u_log = _get_user_log(user_id)
     
     if 'properties' in doc:
         props = doc['properties']
@@ -399,9 +415,9 @@ def apply_base_model(doc: dict, user_id: str = SYSTEM_TOKEN) -> dict:
     doc['touched'] = doc.get('touched', False)
     return doc
 
-def apply_points_model(dataframe:gpd.GeoDataFrame, metadata:dict=None)->gpd.GeoDataFrame:
+def _apply_points_model(dataframe:gpd.GeoDataFrame, metadata:dict=None)->gpd.GeoDataFrame:
     """Only for POINTS metadata"""
-    script_log = get_user_log()
+    script_log = _get_user_log()
 
     default_metadata = {
         'comments': "",
@@ -456,67 +472,59 @@ def apply_points_model(dataframe:gpd.GeoDataFrame, metadata:dict=None)->gpd.GeoD
             
     return new_gdf
 
-def get_reports(parcel_id:str, week:int=None, year:int=None)->list:
-    query = {'space_id':parcel_id, 'block_type':'report'}
-    if week: query['properties.week'] = week
-    if year: query['properties.year'] = year
+def _find_plots_by_parcel(parcel_criteria:dict)->list:
+    return list(db.plots.find({'$or': parcel_criteria}, {
+        'properties.provincia': 1,
+        'properties.municipio': 1,
+        'properties.parcela': 1,
+        'properties.recinto': 1,
+        '_id': 0
+    }))
 
-    query_result = db.blocks.find(query)
-    results = list(query_result)
+def _check_plots_duplicated(features: list[dict]) -> list[dict]:
+    """ Performs a OR-query to fetch existing matches, then filters the input. """
 
-    if len(results)<=0:
-        raise NoReportsFound(f"No reports found for parcel {parcel_id} and week {week} and year {year}")
+    if not features:
+        print("🟡 Duplicates skipped: 0")
+        return []
 
-    return results
+    # Build unique criteria to keep the $or query compact
+    keys = [
+        (
+            f['properties']['provincia'],
+            f['properties']['municipio'],
+            f['properties']['parcela'],
+            f['properties']['recinto'],
+        )
+        for f in features
+    ]
 
-def get_report_path(parcel_id:str, week:int=None, year:int=None)->list:
-    reports = get_reports(parcel_id, week, year)
-    paths = [f"maps/{r['repo_id']}/{r['space_id']}/{r['_id']}" for r in reports]
-    return paths
+    unique_keys = set(keys)
+    query_criteria = [
+        {
+            'properties.provincia': k[0],
+            'properties.municipio': k[1],
+            'properties.parcela': k[2],
+            'properties.recinto': k[3],
+        }
+        for k in unique_keys
+    ]
 
-def get_weather(parcel_id:str, week:int=None, year:int=None)->gpd.GeoDataFrame:
-    query = {'block_type':'weather', 'space_id':parcel_id}
-    if week: query['properties.week'] = week
-    if year: query['properties.year'] = year
-    result = list(db.blocks.find(query))
-    if len(result) == 0:
-        raise NoWeatherFound(f"No weather data found for parcel {parcel_id} and week {week} and year {year}")
-    return result
+    existing = _find_plots_by_parcel(query_criteria) if query_criteria else []
+    existing_set = set(
+        (
+            e['properties']['provincia'],
+            e['properties']['municipio'],
+            e['properties']['parcela'],
+            e['properties']['recinto'],
+        )
+        for e in existing
+    )
 
-def get_weather_last(parcel_id:str)->gpd.GeoDataFrame:
-    query = {'block_type':'weather', 'space_id':parcel_id}
-    result = db.blocks.find_one(query, sort=[('properties.date', -1)])
-    if result is None:
-        raise NoWeatherFound(f"No weather data found for parcel {parcel_id}")
-    return result
+    no_duplicated_features = [
+        f for f, k in zip(features, keys) if k not in existing_set
+    ]
 
-def save_kpis(kpi_data: list[dict]):
-    if not kpi_data:
-        return
-    
-    # Ensure date is a datetime object
-    for item in kpi_data:
-        if 'created_at' not in item:
-            item['created_at'] = datetime.now()
-        if 'updated_at' not in item:
-            item['updated_at'] = datetime.now()
-            
-        # Inject BaseModel and UserLogs matching the Go struct
-        apply_base_model(item)
-
-    db.kpis.insert_many(kpi_data)
-
-def get_block(block_id:str|ObjectId)->dict:
-    try:
-        if isinstance(block_id, str):
-            oid = ObjectId(block_id)
-        else:
-            oid = block_id
-            
-        result = db.blocks.find_one({'_id':oid})
-        if result is None:
-            raise FieldNotFound(f"Block '{block_id}' not found")
-        return result
-    except Exception as e:
-        # If not a valid ObjectId or other error
-        raise FieldNotFound(f"Invalid block ID or not found: {block_id}. Error: {e}")
+    n_duplicates = len(features) - len(no_duplicated_features) if features else 0
+    print(f"🟡 Duplicates skipped: {n_duplicates}")
+    return no_duplicated_features

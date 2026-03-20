@@ -78,8 +78,8 @@ class TestMongoAPI:
 
     def test_upload_plotlist_from_dataframe_field_rename(self, sample_gdf_with_field):
         """Test que se renombra 'field' a 'parcel'"""
-        with patch.object(mongo_api, 'gdf_to_mongo_structure') as mock_gdf_to_mongo, \
-             patch.object(mongo_api, 'check_plots_duplicated') as mock_check_dups, \
+        with patch.object(mongo_api, '_gdf_to_mongo_structure') as mock_gdf_to_mongo, \
+             patch.object(mongo_api, '_check_plots_duplicated') as mock_check_dups, \
              patch('mongo_api.db') as mock_db:
             
             mock_features = [{'properties': {'parcel': 'test'}}] * 3
@@ -105,8 +105,8 @@ class TestMongoAPI:
         insert_result.inserted_ids = ['id1', 'id2', 'id3']
         mock_db.plots.insert_many.return_value = insert_result
         
-        with patch.object(mongo_api, 'gdf_to_mongo_structure') as mock_gdf_to_mongo, \
-             patch.object(mongo_api, 'check_plots_duplicated') as mock_check_dups:
+        with patch.object(mongo_api, '_gdf_to_mongo_structure') as mock_gdf_to_mongo, \
+             patch.object(mongo_api, '_check_plots_duplicated') as mock_check_dups:
             
             mock_features = [{'properties': {'parcel': 'test'}}] * 3
             mock_gdf_to_mongo.return_value = mock_features
@@ -154,7 +154,7 @@ class TestMongoAPI:
         assert len(call_args) == 4  # $geoNear, $sort, $limit, $project
         assert '$geoNear' in call_args[0]
 
-    @patch.object(mongo_api, 'mongo_to_gdf')
+    @patch.object(mongo_api, '_mongo_to_gdf')
     @patch.object(mongo_api, 'find_field_plots')
     def test_get_parcelario_only_operating_true_filters_rows(self, mock_find_field_plots, mock_mongo_to_gdf):
         """Test get_parcelario filtra por operating cuando only_operating=True"""
@@ -174,7 +174,7 @@ class TestMongoAPI:
         assert len(result) == 2
         assert result['operating'].all()
 
-    @patch.object(mongo_api, 'mongo_to_gdf')
+    @patch.object(mongo_api, '_mongo_to_gdf')
     @patch.object(mongo_api, 'find_field_plots')
     def test_get_parcelario_only_operating_false_does_not_filter(self, mock_find_field_plots, mock_mongo_to_gdf):
         """Test get_parcelario no filtra por operating cuando only_operating=False"""
@@ -194,7 +194,7 @@ class TestMongoAPI:
         assert len(result) == 3
         assert result['operating'].tolist() == [True, False, True]
 
-    @patch.object(mongo_api, 'mongo_to_gdf')
+    @patch.object(mongo_api, '_mongo_to_gdf')
     @patch('mongo_api.db')
     def test_get_parcelario_by_id_only_operating_true_filters_rows(self, mock_db, mock_mongo_to_gdf):
         """Test get_parcelario_by_id filtra por operating cuando only_operating=True"""
@@ -214,7 +214,7 @@ class TestMongoAPI:
         assert len(result) == 2
         assert result['operating'].all()
 
-    @patch.object(mongo_api, 'mongo_to_gdf')
+    @patch.object(mongo_api, '_mongo_to_gdf')
     @patch('mongo_api.db')
     def test_get_parcelario_by_id_only_operating_false_does_not_filter(self, mock_db, mock_mongo_to_gdf):
         """Test get_parcelario_by_id no filtra por operating cuando only_operating=False"""
@@ -257,7 +257,7 @@ class TestMongoAPI:
         # Metadata sin parcel_id especificado
         custom_metadata = {'parcel_id': None, 'parcel_name': None}
         
-        result = mongo_api.apply_points_model(sample_gdf_with_parcel, custom_metadata)
+        result = mongo_api._apply_points_model(sample_gdf_with_parcel, custom_metadata)
         
         # Verificar que se agregaron los datos de parcela
         assert result['parcel_id'].iloc[0] == 'P123'
@@ -270,10 +270,10 @@ class TestMongoAPI:
             {'properties': {'provincia': '28', 'municipio': '002', 'parcela': '002', 'recinto': 'B'}}
         ]
         
-        with patch.object(mongo_api, 'find_plots_by_parcel') as mock_find:
+        with patch.object(mongo_api, '_find_plots_by_parcel') as mock_find:
             mock_find.return_value = []  # No duplicados en DB
             
-            new_features = mongo_api.check_plots_duplicated(mock_features)
+            new_features = mongo_api._check_plots_duplicated(mock_features)
             
             assert len(new_features) == 2
 
@@ -295,10 +295,10 @@ class TestMongoAPI:
             }
         ]
         
-        with patch.object(mongo_api, 'find_plots_by_parcel') as mock_find:
+        with patch.object(mongo_api, '_find_plots_by_parcel') as mock_find:
             mock_find.return_value = existing_in_db
             
-            new_features = mongo_api.check_plots_duplicated(mock_features)
+            new_features = mongo_api._check_plots_duplicated(mock_features)
             
             assert len(new_features) == 1  # Solo uno no está duplicado
 
@@ -316,8 +316,8 @@ class TestBackwardCompatibility:
             # Test upload_plotlist_from_dataframe
             mock_db.plots.insert_many.return_value = Mock(inserted_ids=['id1'])
             
-            with patch.object(mongo_api, 'gdf_to_mongo_structure') as mock_gdf_to_mongo, \
-                 patch.object(mongo_api, 'check_plots_duplicated') as mock_check_dups:
+            with patch.object(mongo_api, '_gdf_to_mongo_structure') as mock_gdf_to_mongo, \
+                 patch.object(mongo_api, '_check_plots_duplicated') as mock_check_dups:
                 mock_gdf_to_mongo.return_value = [{'properties': {'parcel': 'test'}}]
                 mock_check_dups.return_value = [{'properties': {'parcel': 'test'}}]
                 
@@ -338,7 +338,7 @@ class TestErrorHandling:
         })  # Sin especificar CRS
         
         with pytest.raises(Exception, match="The GeoDataframe has no CRS"):
-            mongo_api.gdf_to_mongo_structure(gdf_no_crs)
+            mongo_api._gdf_to_mongo_structure(gdf_no_crs)
 
     def test_get_parcelario_field_not_found(self):
         """Test error cuando campo no se encuentra"""
@@ -365,7 +365,7 @@ class TestUtilityFunctions:
         ]
         
         criteria = [{'properties.provincia': '28', 'properties.municipio': '001'}]
-        result = mongo_api.find_plots_by_parcel(criteria)
+        result = mongo_api._find_plots_by_parcel(criteria)
         
         assert len(result) == 1
         mock_db.plots.find.assert_called_once()

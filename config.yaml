@@ -1,4 +1,4 @@
-ENVIRONMENT: local
+ENVIRONMENT: local #[dev, pro, local]
 
 MONGO_STRING_DEV: mongodb+srv://admin:eyvsE3GIbySp1reH@weitec-db-dev.8r5sdpb.mongodb.net/
 MONGO_STRING_PRO: mongodb+srv://admin:eyvsE3GIbySp1reH@weitec-db-pro.sgtmd.mongodb.net/
