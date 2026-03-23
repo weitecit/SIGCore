@@ -15,6 +15,13 @@
    python main.py
    ```
 
+## Docker
+
+```bash
+docker build -f config/Dockerfile -t sigcore_image .
+docker run -p 8000:8000 sigcore_image
+```
+
 ## Project Structure
 
 ```

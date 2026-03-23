@@ -1,19 +1,21 @@
 import yaml
 from pathlib import Path
 import os
+import dotenv
 
 ROOT_FOLDER = Path(os.path.dirname(os.path.abspath(__file__))).parent
-CONFIG_PATH = ROOT_FOLDER / "config.yaml"
 
 LOGS_FOLDER = ROOT_FOLDER / "logs"
 ASSETS_FOLDER = ROOT_FOLDER / 'Assets'
+CONFIG_FOLDER = ROOT_FOLDER / 'config'
+CONFIG_YAML_PATH = CONFIG_FOLDER / "config.yaml"
 
-with open(CONFIG_PATH, "r") as f:
-    config_file = yaml.safe_load(f)
+dotenv.load_dotenv(dotenv_path=CONFIG_FOLDER / ".env")
+with open(CONFIG_YAML_PATH, "r") as f: config_yaml_file = yaml.safe_load(f)
 
-ENVIRONMENT = config_file["ENVIRONMENT"]
-MONGO_STRING = config_file["MONGO_STRING_PRO"] if ENVIRONMENT == "pro" else config_file["MONGO_STRING_DEV"]
-REQUIRED_COLUMNS = config_file.get('REQUIRED_XLS_COLUMNS', [])
+ENVIRONMENT = os.getenv("ENVIRONMENT")
+MONGO_STRING = os.getenv("MONGO_STRING")
+REQUIRED_COLUMNS = config_yaml_file.get('REQUIRED_XLS_COLUMNS', [])
 
 os.makedirs(LOGS_FOLDER, exist_ok=True)
 os.makedirs(ASSETS_FOLDER, exist_ok=True)
