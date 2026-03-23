@@ -1,7 +1,7 @@
 # ================================
 # Stage 1 – Builder
 # ================================
-FROM python:3.12-slim AS base
+FROM python:3.12-slim AS builder
 
 # Evita que Python genere archivos .pyc y activa el buffer sin bloqueos
 ENV PYTHONDONTWRITEBYTECODE=1 \
@@ -21,19 +21,20 @@ ENV PATH="$VENV_PATH/bin:$PATH"
 
 WORKDIR /app
 
-# ============================================
-# CAPA 2: Dependencias base (cambian más frecuentemente)
-# ============================================
-
 COPY requirements.txt ./
 RUN pip install --upgrade pip && pip install -r requirements.txt
 
-# Copiar el resto de la aplicación
+# ================================
+# Stage 2 – Runtime
+# ================================
+FROM python:3.12-slim
+ENV PATH="/opt/venv/bin:$PATH"
+
+COPY --from=builder /opt/venv /opt/venv
 COPY . /app
 
-#TODO ejecutar tests
-
 WORKDIR /app
+
 
 # Use exec form and ensure Python runs unbuffered for immediate log output
 CMD ["python", "-u", "main.py"]
