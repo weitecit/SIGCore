@@ -9,6 +9,9 @@ from shapely.geometry.point import Point
 
 from config import REQUIRED_COLUMNS, ASSETS_FOLDER
 
+class SigpacError(Exception):
+    pass
+
 def polygonize_data_parallel(
     input_data: str | dict | pd.DataFrame,
     max_workers: int = 10,
@@ -17,6 +20,15 @@ def polygonize_data_parallel(
     This function polygonizes a set of plots using parallel processing as polygonize_data do.
     This version uses the oficial SIGPAC API instead of downloading the files directly from the SIGPAC Backend.
     """
+
+    #Check if SIGPAC service is available
+    try:
+        response = requests.get('https://desarrollo.tragsatec.es/ogc-api-feature/')
+        if response.status_code != 200:
+            raise Exception('Response: ' + str(response.status_code) + ' - ' + response.text)
+    except Exception as e:
+        raise SigpacError('SIGPAC service is not available: ' + str(e)) from e
+    
     df_input = open_data(input_data)
 
     mc = missing_columns(df_input)
@@ -28,21 +40,13 @@ def polygonize_data_parallel(
 
     def _fetch_one(plot: pd.Series) -> tuple[gpd.GeoDataFrame | None, pd.Series]:
         try:
-            if math.isnan(plot['enclosure']):
-                detected = _download_parcel(
-                    int(plot['province']),
-                    int(plot['municipality']),
-                    int(plot['polygon']),
-                    int(plot['plot_number']),
-                )
-            else:
-                detected = _download_enclosure(
-                    int(plot['province']),
-                    int(plot['municipality']),
-                    int(plot['polygon']),
-                    int(plot['plot_number']),
-                    int(plot['enclosure']),
-                )
+            detected = _download_plot_file(
+                int(plot['province']),
+                int(plot['municipality']),
+                int(plot['polygon']),
+                int(plot['plot_number']),
+                int(plot['enclosure']) if not math.isnan(plot['enclosure']) else None,
+            )
             print(
                 f'Prov: {plot["province"]} || Mun: {plot["municipality"]} || Pol: {plot["polygon"]} || Par: {plot["plot_number"]} Rec: {plot["enclosure"]}',f'Found: {len(detected)} plots'
                 )
@@ -79,9 +83,9 @@ def polygonize_data_parallel(
             if 'cadastral_ref' in df_input.columns:
                 detected_plots['cadastral_ref'] = plot['cadastral_ref']
 
-
-            out_data = pd.concat([out_data, detected_plots])
-
+            if out_data.empty: out_data = detected_plots
+            else: out_data = pd.concat([out_data, detected_plots])
+    
     out_data.drop_duplicates(subset=['geometry'], inplace=True)
 
     print('DONE!')
@@ -160,25 +164,19 @@ def _adapt_columns(dataframe:pd.DataFrame)->pd.DataFrame:
     }
     return new_df.rename(columns=new_names)
 
-def _download_parcel(prov:int, mun:int, pol:int, par:int)->gpd.GeoDataFrame:
-    req_string = f"{prov}/{mun}/0/0/{pol}/{par}.geojson"
-    r = requests.get(f'https://sigpac-hubcloud.es/servicioconsultassigpac/query/recinfoparc/{req_string}')
+def _download_plot_file(prov:int, mun:int, pol:int, par:int, rec:int=None)->gpd.GeoDataFrame:
+    if rec is None or math.isnan(rec):
+        req_string = f"{prov}/{mun}/0/0/{pol}/{par}.geojson"
+        r = requests.get(f'https://sigpac-hubcloud.es/servicioconsultassigpac/query/recinfoparc/{req_string}')
+    else:
+        req_string = f"{prov}/{mun}/0/0/{pol}/{par}/{rec}.geojson"
+        r = requests.get(f'https://sigpac-hubcloud.es/servicioconsultassigpac/query/recinfo/{req_string}')
     if r.status_code != 200:
-        raise KeyError(f'Error getting parcel info {req_string}: {r.content}')
-
-    gdf = gpd.GeoDataFrame.from_features(r.json()['features'])
-    #ha to m2
-    gdf.rename(columns={'superficie': 'dn_surface'}, inplace=True)
-    gdf['dn_surface'] = gdf['dn_surface'] * 10000
-    return gdf
-
-def _download_enclosure(prov:int, mun:int, pol:int, par:int, rec:int)->gpd.GeoDataFrame:
-    req_string = f"{prov}/{mun}/0/0/{pol}/{par}/{rec}.geojson"
-    r = requests.get(f'https://sigpac-hubcloud.es/servicioconsultassigpac/query/recinfo/{req_string}')
-    if r.status_code != 200:
-        raise KeyError(f'Error getting enclosure info {req_string}: {r.content}')
+        raise KeyError(f'Error getting plot file {req_string}: {r.content}')
         
     gdf = gpd.GeoDataFrame.from_features(r.json()['features'])
+    if gdf.empty:
+        raise ValueError(f'Plot file {req_string} not found')
     #ha to m2
     gdf.rename(columns={'superficie': 'dn_surface'}, inplace=True)
     gdf['dn_surface'] = gdf['dn_surface'] * 10000

@@ -63,6 +63,8 @@ async def polygonize_plots(request:Request):
                 status_code=200)
     except KeyError as e:
         return JSONResponse(content={"message": str(e)}, status_code=400)
+    except catastro.SigpacError as e:
+        return JSONResponse(content={"message": str(e)}, status_code=502)
     except Exception as e:
         return JSONResponse(content={"message": str(e)}, status_code=500)
 
