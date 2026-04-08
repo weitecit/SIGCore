@@ -1,0 +1,55 @@
+name: 'Security scan for Docker image'
+description: 'Security scan for Docker image'
+inputs:
+  break-workflow:  
+    description: 'Boolean used for blocking workflow when vulnerabilities found'
+    type: boolean
+    required: false
+    default: false
+  severity-break:
+    description: 'Critical, High, Medium, Low'
+    default: "High"
+    options:
+      - "Critical"
+      - "High"
+      - "Medium"
+      - "Low"
+  image-path:
+    description: 'path to Dockerfile'
+    required: false
+    default: "."
+runs:
+  using: "composite"
+  steps:
+    - name: install syft and grype
+      run: |
+        curl -sSfL https://get.anchore.io/syft | sudo sh -s -- -b /usr/local/bin && \
+        curl -sSfL https://get.anchore.io/grype| sudo sh -s -- -b /usr/local/bin
+      shell: bash
+
+    - name: generate sbom
+      run: |
+       syft scan ${{ inputs.image-path }} -o json > sbom.json
+      shell: bash
+
+    - name: generate vulnerability report
+      run: |
+        grype sbom:sbom.json > report.txt
+        cat report.txt
+      shell: bash
+
+    - name: break workflow
+      if: ${{ inputs.break-workflow == 'true' }}
+      run: |
+        if grep ${{ inputs.severity-break }} report.txt; then
+          echo "${{ inputs.severity-break }} vulnerabilities found"
+          exit 1
+        fi
+      shell: bash
+        
+    - name: delete sbom and report
+      if: ${{ always() }}
+      run: |
+        rm sbom.json report.txt
+      shell: bash
+

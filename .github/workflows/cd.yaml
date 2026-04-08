@@ -1,0 +1,101 @@
+name: CD
+on:
+  workflow_run:
+    workflows: ["CI"]
+    types: ["completed"]
+
+  workflow_dispatch:
+    inputs:
+      project:
+        description: "Project name"
+        type: choice
+        options:
+        - plataforma-agtech
+        required: true
+      environment:
+        description: "Environment"
+        type: choice
+        options:
+        - dev
+        - pro
+        required: true
+      version:
+        description: "Tag (vM.m.p for pro, v.M.m.p-rcN for dev)"
+        type: string
+        required: true
+ 
+jobs: 
+  deployment:
+    if: >
+      github.event_name == 'workflow_dispatch' ||
+      (
+        github.event_name == 'workflow_run' &&
+        github.event.workflow_run.conclusion == 'success' &&
+        contains(github.event.workflow_run.head_branch, '-rc')
+      )
+ 
+    environment: >-
+      ${{ 
+        github.event_name == 'workflow_run' &&
+          'dev'
+        ||
+        github.event_name == 'workflow_dispatch' &&
+          inputs.environment
+      }}
+
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Set env
+        run: |
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            echo "PROJECT=${{ github.event.inputs.project }}" >> $GITHUB_ENV
+            echo "ENVIRONMENT=${{ github.event.inputs.environment }}" >> $GITHUB_ENV
+            echo "TAG=${{ github.event.inputs.version }}" >> $GITHUB_ENV  
+          else
+            echo "PROJECT=plataforma-agtech" >> $GITHUB_ENV
+            echo "ENVIRONMENT=dev" >> $GITHUB_ENV
+            echo "TAG=${{ github.event.workflow_run.head_branch }}" >> $GITHUB_ENV
+          fi
+
+      - name: Check user role
+        id: check_role
+        if: github.event_name == 'workflow_dispatch' 
+        run: |
+          USER="${{ github.actor }}"
+          OWNER="${{ github.repository_owner }}"
+          REPO=$(basename "${{ github.repository }}")
+
+          echo "Checking role for user $USER in $OWNER/$REPO"
+
+          ROLE=$(curl -s \
+            -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
+            -H "Accept: application/vnd.github+json" \
+            "https://api.github.com/repos/$OWNER/$REPO/collaborators/$USER/permission" \
+            | jq -r '.permission')
+
+          echo "User $USER has role: $ROLE"
+
+          if [[ "$ROLE" != "admin" ]]; then
+            echo "Access denied for $USER (role: $ROLE)"
+            exit 1
+          fi
+
+          echo "Access granted for $USER"
+
+      - uses: actions/checkout@v5
+      
+      - uses: ./.github/actions/deploy
+        with:
+          docker-image: "gcr.io/${{ env.PROJECT }}/${{ vars.APP_NAME }}:${{ env.TAG }}"
+          gcp-project-id: $PROJECT
+          gcp-sa-key: ${{ secrets.GCP_SA_KEY_64_GITHUB }}
+          service-name: "weitec-sigcore-${{ env.ENVIRONMENT }}"
+          app-name: ${{ vars.APP_NAME }}
+          region: europe-west1
+          port: 8000
+          memory: 1Gi
+          cpu: 1
+          min-instances: 0
+          max-instances: 1
+          timeout: 15
+

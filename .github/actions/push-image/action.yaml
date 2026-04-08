@@ -1,0 +1,61 @@
+name: 'Push Container Image'
+description: 'Push Container Image'
+inputs:
+  gcp-project-id:  
+    description: 'GCP_PROJECT_ID'
+    required: true
+  gcp-sa-key-64:  
+    description: 'GCP_SA_KEY_64'
+    required: true
+  app-name:  
+    description: 'App name'
+    required: true
+  image-tag:
+    description: 'Version tag for new image'
+    required: true
+runs:
+  using: "composite"
+  steps:
+    - name: setup
+      run: |
+       echo DOCKER_IMAGE="gcr.io/${{ inputs.gcp-project-id }}/${{ inputs.app-name }}:${{ inputs.image-tag }}" >> $GITHUB_ENV
+      shell: bash
+
+    - name: install gcloud
+      run: |
+        sudo rm /usr/share/keyrings/cloud.google.gpg && sudo rm /usr/share/keyrings/cloud.google.gpg~ && sudo rm /etc/apt/sources.list.d/google-cloud-sdk.list
+        curl https://packages.cloud.google.com/apt/doc/apt-key.gpg | sudo gpg --dearmor -o /usr/share/keyrings/cloud.google.gpg
+        echo "deb [signed-by=/usr/share/keyrings/cloud.google.gpg] https://packages.cloud.google.com/apt cloud-sdk main" | sudo tee -a /etc/apt/sources.list.d/google-cloud-sdk.list
+        sudo apt-get update && sudo apt-get install -y google-cloud-cli
+      shell: bash
+
+    - name: Login GCP 
+      run: |
+        echo  ${{ inputs.gcp-sa-key-64 }} | base64 --decode > ./gcp-key.json
+        gcloud config set disable_prompts false
+        gcloud auth activate-service-account --key-file=gcp-key.json
+        gcloud config set project ${{ inputs.gcp-project-id }}
+        rm gcp-key.json
+      shell: bash
+
+    - name: docker login
+      run: |
+        gcloud auth print-access-token | docker login -u oauth2accesstoken --password-stdin https://gcr.io
+      shell: bash
+
+    - name: Docker push to GCP Container Registry
+      run: sudo -E docker push "$DOCKER_IMAGE"
+      shell: bash
+
+    - name: Docker logout
+      run: |
+       sudo docker logout
+      shell: bash
+
+    - name: Logout GCP
+      run: |
+        gcloud auth revoke --all
+        gcloud config unset project
+        sudo rm -rf .config/gcloud
+      shell: bash
+
