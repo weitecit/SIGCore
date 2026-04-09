@@ -32,8 +32,6 @@ jobs:
       #   run: |
       #     envsubst < back/deploy/promtail-config.yaml.template > back/deploy/promtail-config.yaml
           
-      - run: ls -R ./.github/actions/build
-
       - uses: ./.github/actions/build
         env:
           ACTIONS_ENVIRONMENT: ${{ vars.ENVIRONMENT }}
@@ -65,22 +63,22 @@ jobs:
           echo "BRANCH=$(git rev-parse --abbrev-ref HEAD)" >> $GITHUB_ENV
           echo "branch=${BRANCH}" >> $GITHUB_OUTPUT
 
-      # - name: Trigger notifier
-      #   if: failure()
-      #   run: |
-      #     curl -X POST \
-      #       -H "Authorization: Bearer ${{ secrets.GH_TOKEN }}" \
-      #       -H "Accept: application/vnd.github+json" \
-      #       -H "Content-Type: application/json" \
-      #       -d '{
-      #         "event_type": "ci_failure",
-      #         "client_payload": {
-      #           "environment": "${{ vars.ENVIRONMENT }}",
-      #           "repository": "${{ github.repository }}",
-      #           "workflow": "${{ github.workflow }}",
-      #           "run_id": "${{ github.run_id }}"
-      #         }
-      #       }' \
-      #       https://api.github.com/repos/${{ github.repository }}/dispatches
+      - name: Trigger notifier
+        if: failure()
+        run: |
+          curl -X POST \
+            -H "Authorization: Bearer ${{ secrets.GH_TOKEN }}" \
+            -H "Accept: application/vnd.github+json" \
+            -H "Content-Type: application/json" \
+            -d '{
+              "event_type": "ci_failure",
+              "client_payload": {
+                "environment": "${{ vars.ENVIRONMENT }}",
+                "repository": "${{ github.repository }}",
+                "workflow": "${{ github.workflow }}",
+                "run_id": "${{ github.run_id }}"
+              }
+            }' \
+            https://api.github.com/repos/${{ github.repository }}/dispatches
 
 
