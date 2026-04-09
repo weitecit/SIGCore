@@ -54,7 +54,7 @@ jobs:
         uses: ./.github/actions/push-image
         with:
           gcp-project-id: plataforma-agtech
-          gcp-sa-key-64: ${{ secrets.GCP_SA_KEY_64_GITHUB }}
+          gcp-sa-key-64: ${{ secrets.GCP_SA_KEY_64 }}
           app-name: ${{ vars.APP_NAME }}
           image-tag: ${{ github.ref_name }}
 
