@@ -1,9 +1,13 @@
-# TODO: variables?
 # ================================
 # Stage 1 – Builder
 # ================================
 FROM python:3.12-slim AS builder
 
+# VARIABLES AND SECRETS FROM ENVIRONMENT
+ARG MONGO_STRING
+
+ENV MONGO_STRING=${MONGO_STRING}
+	
 # Evita que Python genere archivos .pyc y activa el buffer sin bloqueos
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1
