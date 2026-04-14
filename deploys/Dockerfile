@@ -35,6 +35,11 @@ RUN pip install --upgrade pip && pip install -r requirements.txt
 FROM python:3.12-slim
 ENV PATH="/opt/venv/bin:$PATH"
 
+# VARIABLES AND SECRETS FROM ENVIRONMENT
+ARG MONGO_STRING
+
+ENV MONGO_STRING=${MONGO_STRING}
+	
 COPY --from=builder /opt/venv /opt/venv
 COPY . /app
 
