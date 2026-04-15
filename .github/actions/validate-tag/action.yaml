@@ -1,0 +1,53 @@
+name: 'Validate tag naming'
+description: 'Validate tag naming'
+inputs:
+  tag:  
+    description: 'Tag to check'
+    required: true
+runs:
+  using: "composite"
+  steps:
+    - name: setup
+      run: |
+        git fetch --prune --unshallow --tags origin "+refs/heads/*:refs/remotes/origin/*"
+
+        TAG=${{ inputs.tag }}
+
+        if [[ "${GITHUB_EVENT_NAME}" == "workflow_run" ]]; then
+          BRANCH="${{ github.event.workflow_run.outputs.branch }}"
+        else
+          BRANCH=$(git branch -r --contains $GITHUB_SHA | grep -Eo 'origin/[^ ]+' | head -1 | sed 's|origin/||')
+        fi
+
+        echo "Tag: $TAG | Branch: $BRANCH"
+
+        VERSION_REGEX="^v[0-9]+\.[0-9]+\.[0-9]+(-(rc[0-9]+|hotfix\.rc[0-9]+))?$"
+        
+        IS_HOTFIX_RC=false
+
+        if [[ "$TAG" =~ hotfix\.rc[0-9]+ ]]; then
+          IS_HOTFIX_RC=true
+        fi
+
+        if [[ ! "$TAG" =~ $VERSION_REGEX ]]; then
+          echo "Invalid tag format. Expected vM.m.p or vM.m.p-rcN (e.g., v1.2.3 or v1.2.3-rc1)"
+          exit 1
+        fi
+
+        if [[ "$TAG" =~ -rc[0-9]+ && "$BRANCH" != "develop" && "$IS_HOTFIX_RC" = false ]]; then
+          echo "RC tags must come from develop branch."
+          exit 1
+        fi
+
+        if [[ "$IS_HOTFIX_RC" = true && "$BRANCH" != main && "$BRANCH" != hotfix/* ]]; then
+          echo "Hotfix RC tags must come from main or hotfix/* branches."
+          exit 1
+        fi
+
+        if [[ ! "$TAG" =~ -rc[0-9]+ && "$BRANCH" != "main" ]]; then
+          echo "Stable tags must come from main branch."
+          exit 1
+        fi
+  
+      shell: bash
+

@@ -1,0 +1,45 @@
+name: 'Build Container Image'
+description: 'Build Container Image'
+inputs:
+  gcp-project-id:  
+    description: 'GCP_PROJECT_ID'
+    required: true
+  app-name:  
+    description: 'App name'
+    required: true
+  dockerfile-path:  
+    description: 'Dockerfile path'
+    required: false
+    default: "."
+  image-tag:
+    description: 'Version tag for new image'
+    required: true
+runs:
+  using: "composite"
+  steps:
+    - name: setup
+      run: |
+       echo DOCKER_IMAGE="gcr.io/${{ inputs.gcp-project-id }}/${{ inputs.app-name }}:${{ inputs.image-tag }}" >> $GITHUB_ENV
+      shell: bash
+
+    - name: Docker build
+      run: |
+        BUILD_ARGS=()
+
+        while IFS='=' read -r name value; do
+          if [[ "$name" =~ ^ACTIONS_(.*) ]]; then
+            real_name="${BASH_REMATCH[1]}"
+            BUILD_ARGS+=(--build-arg "$real_name=$value")
+          fi
+        done < <(env)
+
+        sudo docker buildx build \
+          --no-cache \
+          --platform linux/amd64 \
+          --load \
+          -t "$DOCKER_IMAGE" \
+          -f "${{ inputs.dockerfile-path }}/Dockerfile" \
+          "${BUILD_ARGS[@]}" \
+          .
+      shell: bash
+

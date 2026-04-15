@@ -1,0 +1,1 @@
+REQUIRED_XLS_COLUMNS: ["province", "municipality", "polygon", "plot_number"]

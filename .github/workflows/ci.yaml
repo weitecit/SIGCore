@@ -1,0 +1,84 @@
+name: CI
+on:
+  push: 
+    tags:
+      - '*'
+permissions:
+    contents: read
+    actions: read
+jobs: 
+  integration:
+    runs-on: ubuntu-24.04
+    environment: >-
+      ${{ 
+        contains(github.ref_name, 'rc') && 'dev' || 'pro'
+      }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          clean: true
+
+      - uses: ./.github/actions/validate-tag
+        with:
+          tag: ${GITHUB_REF#refs/tags/}
+
+      - name: Git login
+        run: |
+          git remote set-url origin https://x-access-token:${{ secrets.GH_TOKEN }}@github.com/${{ github.repository }}
+
+      # - name: Get promtail config from template
+      #   env:
+      #     LOKI_URL: ${{ vars.LOKI_URL }}
+      #   run: |
+      #     envsubst < back/deploy/promtail-config.yaml.template > back/deploy/promtail-config.yaml
+          
+      - uses: ./.github/actions/build
+        env:
+          ACTIONS_ENVIRONMENT: ${{ vars.ENVIRONMENT }}
+
+          ACTIONS_MONGO_STRING: ${{ secrets.MONGO_STRING }}
+
+        with:
+          gcp-project-id: plataforma-agtech
+          gcp-sa-key-64: ${{ secrets.GCP_SA_KEY_64 }}
+          app-name: ${{ vars.APP_NAME }}
+          dockerfile-path: ./deploys
+          image-tag: ${{ github.ref_name }}
+
+      - uses: ./.github/actions/scan-image
+        with:
+          break-workflow: false
+          image-path: ./deploys
+
+      - name: Push image
+        uses: ./.github/actions/push-image
+        with:
+          gcp-project-id: plataforma-agtech
+          gcp-sa-key-64: ${{ secrets.GCP_SA_KEY_64 }}
+          app-name: ${{ vars.APP_NAME }}
+          image-tag: ${{ github.ref_name }}
+
+      - name: Set branch output for CD validation
+        run: |
+          echo "BRANCH=$(git rev-parse --abbrev-ref HEAD)" >> $GITHUB_ENV
+          echo "branch=${BRANCH}" >> $GITHUB_OUTPUT
+
+      - name: Trigger notifier
+        if: failure()
+        run: |
+          curl -X POST \
+            -H "Authorization: Bearer ${{ secrets.GH_TOKEN }}" \
+            -H "Accept: application/vnd.github+json" \
+            -H "Content-Type: application/json" \
+            -d '{
+              "event_type": "ci_failure",
+              "client_payload": {
+                "environment": "${{ vars.ENVIRONMENT }}",
+                "repository": "${{ github.repository }}",
+                "workflow": "${{ github.workflow }}",
+                "run_id": "${{ github.run_id }}"
+              }
+            }' \
+            https://api.github.com/repos/${{ github.repository }}/dispatches
+
+
