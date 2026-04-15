@@ -45,10 +45,10 @@ def polygonize_data_parallel(
                 int(plot['municipality']),
                 int(plot['polygon']),
                 int(plot['plot_number']),
-                int(plot['enclosure']) if not math.isnan(plot['enclosure']) else None,
+                int(plot['enclosure']) if 'enclosure' in plot.index and not math.isnan(plot['enclosure']) else None,
             )
             print(
-                f'Prov: {plot["province"]} || Mun: {plot["municipality"]} || Pol: {plot["polygon"]} || Par: {plot["plot_number"]} Rec: {plot["enclosure"]}',f'Found: {len(detected)} plots'
+                f'Prov: {plot["province"]} || Mun: {plot["municipality"]} || Pol: {plot["polygon"]} || Par: {plot["plot_number"]}',f'Found: {len(detected)} plots'
                 )
 
             return detected, plot
