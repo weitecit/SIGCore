@@ -26,11 +26,11 @@ jobs:
         run: |
           git remote set-url origin https://x-access-token:${{ secrets.GH_TOKEN }}@github.com/${{ github.repository }}
 
-      # - name: Get promtail config from template
-      #   env:
-      #     LOKI_URL: ${{ vars.LOKI_URL }}
-      #   run: |
-      #     envsubst < back/deploy/promtail-config.yaml.template > back/deploy/promtail-config.yaml
+      - name: Get promtail config from template
+        env:
+          LOKI_URL: ${{ vars.LOKI_URL }}
+        run: |
+          envsubst < back/deploy/promtail-config.yaml.template > back/deploy/promtail-config.yaml
           
       - uses: ./.github/actions/build
         env:
