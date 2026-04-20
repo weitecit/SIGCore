@@ -36,6 +36,7 @@ RUN apt-get update && apt-get install -y python3 && ln -s /usr/bin/python3 /usr/
 WORKDIR /app
 
 # Copy python runtime + app
+COPY --from=builder /usr/local /usr/local
 COPY --from=builder /opt/venv /opt/venv
 COPY --from=builder /app /app
 
