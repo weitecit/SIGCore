@@ -31,6 +31,8 @@ COPY . /app
 # ================================
 FROM grafana/promtail:latest AS prod
 
+RUN apt-get update && apt-get install -y python3 && ln -s /usr/bin/python3 /usr/bin/python
+
 WORKDIR /app
 
 # Copy python runtime + app
