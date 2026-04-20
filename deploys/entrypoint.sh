@@ -13,7 +13,7 @@ PROMTAIL_PID=$!
 
 # Iniciar la aplicación y redirigir logs
 echo "▶ Starting Go API..."
-python3 main.py 2>&1 | tee -a /tmp/app.log &
+/opt/venv/bin/python -u main.py 2>&1 | tee -a /tmp/app.log &
 
 APP_PID=$!
 
