@@ -11,10 +11,6 @@ promtail -config.file=/etc/promtail/config.yaml &
 
 PROMTAIL_PID=$!
 
-# Migraciones DB
-echo "▶ Running DB migrations..."
-/app/migrate --execute
-
 # Iniciar la aplicación y redirigir logs
 echo "▶ Starting Go API..."
 /app/main 2>&1 | tee -a /tmp/app.log &
