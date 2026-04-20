@@ -30,7 +30,7 @@ jobs:
         env:
           LOKI_URL: ${{ vars.LOKI_URL }}
         run: |
-          envsubst < back/deploy/promtail-config.yaml.template > back/deploy/promtail-config.yaml
+          envsubst < deploys/promtail-config.yaml.template > deploys/promtail-config.yaml
           
       - uses: ./.github/actions/build
         env:
