@@ -3,17 +3,23 @@
 # ================================
 FROM python:3.12-slim AS builder
 
+# VARIABLES AND SECRETS FROM ENVIRONMENT
 ARG MONGO_STRING
-ENV MONGO_STRING=${MONGO_STRING}
 
+ENV MONGO_STRING=${MONGO_STRING}
+	
+# Evita que Python genere archivos .pyc y activa el buffer sin bloqueos
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1
 
+
+# Instala dependencias del sistema
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
+#Crea el entorno virtual
 ENV VENV_PATH=/opt/venv
 RUN python -m venv $VENV_PATH
 ENV PATH="$VENV_PATH/bin:$PATH"
@@ -23,42 +29,22 @@ WORKDIR /app
 COPY requirements.txt ./
 RUN pip install --upgrade pip && pip install -r requirements.txt
 
-# Copy app in builder (optional but cleaner if you want pre-compiled deps ready)
-COPY . /app
-
 # ================================
-# Stage 2 – Runtime (Promtail)
+# Stage 2 – Runtime
 # ================================
-FROM grafana/promtail:latest AS prod
-
-RUN apt-get update && apt-get install -y python3 && ln -s /usr/bin/python3 /usr/bin/python
-
-WORKDIR /app
-
-# Copy python runtime + app
-COPY --from=builder /usr/local /usr/local
-COPY --from=builder /opt/venv /opt/venv
-COPY --from=builder /app /app
-
+FROM python:3.12-slim
 ENV PATH="/opt/venv/bin:$PATH"
 
 # VARIABLES AND SECRETS FROM ENVIRONMENT
 ARG MONGO_STRING
-ARG APP_NAME
-ARG PORT
 
 ENV MONGO_STRING=${MONGO_STRING}
-ENV APP_NAME=${APP_NAME}
-ENV PORT=${PORT}
+	
+COPY --from=builder /opt/venv /opt/venv
+COPY . /app
 
-# Config
-COPY ./deploys/promtail-config.yaml /etc/promtail/config.yaml
-COPY ./deploys/entrypoint.sh /entrypoint.sh
+WORKDIR /app
 
-# Fix line endings + permissions
-USER root
-RUN sed -i 's/\r$//' /entrypoint.sh && chmod +x /entrypoint.sh
 
-EXPOSE ${PORT}
-
-ENTRYPOINT ["/entrypoint.sh"]
+# Use exec form and ensure Python runs unbuffered for immediate log output
+CMD ["python", "-u", "main.py"]

@@ -30,9 +30,22 @@ jobs:
         env:
           LOKI_URL: ${{ vars.LOKI_URL }}
         run: |
-          envsubst < deploys/promtail-config.yaml.template > deploys/promtail-config.yaml
+          envsubst < deploys/promtail/promtail-config.yaml.template > deploys/promtail/promtail-config.yaml
           
-      - uses: ./.github/actions/build
+      - name: Build promtail
+        uses: ./.github/actions/build
+        env:
+          ACTIONS_LOKI_URL: ${{ vars.LOKI_URL }}
+
+        with:
+          gcp-project-id: plataforma-agtech
+          gcp-sa-key-64: ${{ secrets.GCP_SA_KEY_64 }}
+          app-name: "promtail-${{ vars.APP_NAME }}"
+          dockerfile-path: ./deploys/promtail
+          image-tag: ${{ github.ref_name }}
+
+      - name: Build app
+        uses: ./.github/actions/build
         env:
           ACTIONS_ENVIRONMENT: ${{ vars.ENVIRONMENT }}
 
@@ -50,18 +63,21 @@ jobs:
           break-workflow: false
           image-path: ./deploys
 
-      - name: Push image
+      - name: Push promtail image
+        uses: ./.github/actions/push-image
+        with:
+          gcp-project-id: plataforma-agtech
+          gcp-sa-key-64: ${{ secrets.GCP_SA_KEY_64 }}
+          app-name: promtail-${{ vars.APP_NAME }}
+          image-tag: ${{ github.ref_name }}
+
+      - name: Push app image
         uses: ./.github/actions/push-image
         with:
           gcp-project-id: plataforma-agtech
           gcp-sa-key-64: ${{ secrets.GCP_SA_KEY_64 }}
           app-name: ${{ vars.APP_NAME }}
           image-tag: ${{ github.ref_name }}
-
-      - name: Set branch output for CD validation
-        run: |
-          echo "BRANCH=$(git rev-parse --abbrev-ref HEAD)" >> $GITHUB_ENV
-          echo "branch=${BRANCH}" >> $GITHUB_OUTPUT
 
       - name: Trigger notifier
         if: failure()
