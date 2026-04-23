@@ -92,17 +92,17 @@ jobs:
         env:
           APP_IMAGE_URL: "gcr.io/${{ env.PROJECT }}/${{ vars.APP_NAME }}:${{ env.TAG }}"
           PROMTAIL_IMAGE_URL: "gcr.io/${{ env.PROJECT }}/promtail-${{ vars.APP_NAME }}:${{ env.TAG }}"
-          GCP_PTOJECT_ID: $PROJECT
+          GCP_PTOJECT_ID: "$PROJECT"
           CR_SERVICE_NAME: "weitec-sigcore-${{ env.ENVIRONMENT }}"
-          APP_NAME: ${{ vars.APP_NAME }}
-          GCP_REGION: europe-west1
-          APP_IMAGE_PORT: 8000
-          APP_MEMORY_LIMIT: 1Gi
-          APP_CPU_LIMIT: 1
-          CR_TIMEOUT: 15
-          CR_INGRESS_STATUS: internal
+          APP_NAME: "${{ vars.APP_NAME }}"
+          GCP_REGION: "europe-west1"
+          APP_IMAGE_PORT: "8000"
+          APP_MEMORY_LIMIT: "1Gi"
+          APP_CPU_LIMIT: "1"
+          CR_TIMEOUT: "15"
+          CR_INGRESS_STATUS: "internal"
           CR_CONNECTOR_NAME: "projects/plataforma-agtech/locations/europe-west1/connectors/conector-sigcore-${{ vars.ENVIRONMENT }}"
-          CR_APP_MAX_REQUEST_BYTES: 52428800
-          CR_MAX_SCALE: 1
-          CR_APP_STARTUP_TIMEOUT: 240
+          CR_APP_MAX_REQUEST_BYTES: "52428800"
+          CR_MAX_SCALE: "1"
+          CR_APP_STARTUP_TIMEOUT: "240"
  
