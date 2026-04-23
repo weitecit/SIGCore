@@ -101,6 +101,8 @@ runs:
 
         gcloud run services replace deploys/service.yaml
 
+      shell: bash
+
     - name: Logout GCP
       run: |
         gcloud auth revoke --all
