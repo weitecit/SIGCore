@@ -76,7 +76,7 @@ runs:
         rm gcp-key.json
       shell: bash
 
-    - name: Load inputs into env
+    - name: Deploy service.yaml
       run: |
         echo "GCP_PROJECT_ID=${{ inputs.gcp-project-id }}" >> $GITHUB_ENV
         echo "GCP_REGION=${{ inputs.region }}" >> $GITHUB_ENV
@@ -96,17 +96,10 @@ runs:
         echo "APP_MEMORY_LIMIT=${{ inputs.memory }}" >> $GITHUB_ENV
 
         echo "PROMTAIL_IMAGE_URL=${{ inputs.promtail-docker-image }}" >> $GITHUB_ENV
-      shell: bash
 
-    - name: Create service.yaml
-      run: |
-       envsubst < deploys/service.yaml.template > deploys/service.yaml
-      shell: bash
+        envsubst < deploys/service.yaml.template > deploys/service.yaml
 
-    - name: Deploy
-      run: |
         gcloud run services replace deploys/service.yaml
-      shell: bash
 
     - name: Logout GCP
       run: |
