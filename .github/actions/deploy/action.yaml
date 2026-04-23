@@ -25,7 +25,7 @@ runs:
 
     - name: Deploy
       run: |
-        gcloud run replace ${{ inputs.service.yaml-path }}
+        gcloud run services replace ${{ inputs.service.yaml-path }}
       shell: bash
 
     - name: Logout GCP

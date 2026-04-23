@@ -82,8 +82,8 @@ runs:
         echo "APP_NAME=${{ inputs.app-name }}" >> $GITHUB_ENV
         echo "APP_IMAGE_URL=${{ inputs.app-docker-image }}" >> $GITHUB_ENV
         echo "APP_IMAGE_PORT=${{ inputs.app-port }}" >> $GITHUB_ENV
-        echo "APP_CPU_LIMIT=${{ inputs.app-cpu-limit }}" >> $GITHUB_ENV
-        echo "APP_MEMORY_LIMIT=${{ inputs.app-memory-limit }}" >> $GITHUB_ENV
+        echo "APP_CPU_LIMIT=${{ inputs.cpu }}" >> $GITHUB_ENV
+        echo "APP_MEMORY_LIMIT=${{ inputs.memory }}" >> $GITHUB_ENV
 
         echo "PROMTAIL_IMAGE_URL=${{ inputs.promtail-docker-image }}" >> $GITHUB_ENV
       shell: bash
