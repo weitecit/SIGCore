@@ -2,24 +2,24 @@ apiVersion: serving.knative.dev/v1
 kind: Service
 metadata:
   annotations:
-    run.googleapis.com/ingress: ${CR_INGRESS_STATUS}
-    run.googleapis.com/ingress-status: ${CR_INGRESS_STATUS}
+    run.googleapis.com/ingress: "${CR_INGRESS_STATUS}"
+    run.googleapis.com/ingress-status: "${CR_INGRESS_STATUS}"
     run.googleapis.com/maxScale: '100'
     run.googleapis.com/urls: '["https://${CR_SERVICE_NAME}-${GCP_PROJECT_NAME}.${GCP_REGION}.run.app"]'
   labels:
-    cloud.googleapis.com/location: ${GCP_REGION}
-  name: ${CR_SERVICE_NAME}
-  namespace: ${GCP_PROJECT_NAME}
+    cloud.googleapis.com/location: "${GCP_REGION}"
+  name: "${CR_SERVICE_NAME}"
+  namespace: "${GCP_PROJECT_NAME}"
 
 spec:
   template:
     metadata:
       annotations:
-        autoscaling.knative.dev/maxScale: ${CR_MAX_SCALE}
-        run.googleapis.com/client-name: gcloud
+        autoscaling.knative.dev/maxScale: "${CR_MAX_SCALE}"
+        run.googleapis.com/client-name: "gcloud"
         run.googleapis.com/startup-cpu-boost: 'true'
-        run.googleapis.com/vpc-access-connector: projects/${GCP_PROJECT_NAME}/locations/${GCP_REGION}/connectors/${CR_CONNECTOR_NAME}
-        run.googleapis.com/vpc-access-egress: all-traffic
+        run.googleapis.com/vpc-access-connector: "projects/${GCP_PROJECT_NAME}/locations/${GCP_REGION}/connectors/${CR_CONNECTOR_NAME}"
+        run.googleapis.com/vpc-access-egress: "all-traffic"
       labels:
         client.knative.dev/nonce: adsfgxblvo
         run.googleapis.com/startupProbeType: Default
@@ -27,26 +27,26 @@ spec:
     spec:
       containerConcurrency: 80
       serviceAccountName: ${GCP_PROJECT_NAME}-compute@developer.gserviceaccount.com
-      timeoutSeconds: ${CR_TIMEOUT}
+      timeoutSeconds: "${CR_TIMEOUT}"
       containers:
-        - name: ${APP_NAME}
-          image: ${APP_IMAGE_URL}
+        - name: "${APP_NAME}"
+          image: "${APP_IMAGE_URL}"
           env:
             - name: MAX_REQUEST_BYTES
               value: "${CR_APP_MAX_REQUEST_BYTES}"
           ports:
-            - containerPort: ${APP_IMAGE_PORT}
+            - containerPort: "${APP_IMAGE_PORT}"
               name: http1
           resources:
             limits:
               cpu: "${APP_CPU_LIMIT}"
-              memory: ${APP_MEMORY_LIMIT}
+              memory: "${APP_MEMORY_LIMIT}"
           startupProbe:
             failureThreshold: 1
             periodSeconds: 240
             tcpSocket:
-              port: ${APP_IMAGE_PORT}
-            timeoutSeconds: ${CR_APP_STARTUP_TIMEOUT}
+              port: "${APP_IMAGE_PORT}"
+            timeoutSeconds: "${CR_APP_STARTUP_TIMEOUT}"
 
         - name: promtail
-          image: ${PROMTAIL_IMAGE_URL}
+          image: "${PROMTAIL_IMAGE_URL}"
