@@ -106,4 +106,4 @@ jobs:
         with:
           gcp-project-id: $PROJECT
           gcp-sa-key: ${{ secrets.GCP_SA_KEY_64 }}
-          service.yaml-path: "deploys/service.yaml"
+          service-yaml-path: "deploys/service.yaml"
