@@ -67,6 +67,7 @@ runs:
   using: "composite"
   steps:
     - name: Load inputs into env
+      run: |
         echo "GCP_PROJECT_ID=${{ inputs.gcp-project-id }} >> $GITHUB_ENV
         echo "GCP_REGION=${{ inputs.region }} >> $GITHUB_ENV
 
