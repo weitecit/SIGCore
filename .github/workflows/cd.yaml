@@ -92,7 +92,7 @@ jobs:
         env:
           APP_IMAGE_URL: "gcr.io/${{ env.PROJECT }}/${{ vars.APP_NAME }}:${{ env.TAG }}"
           PROMTAIL_IMAGE_URL: "gcr.io/${{ env.PROJECT }}/promtail-${{ vars.APP_NAME }}:${{ env.TAG }}"
-          GCP_PTOJECT_ID: "$PROJECT"
+          GCP_PTOJECT_ID: "plataforma-agtech"
           CR_SERVICE_NAME: "weitec-sigcore-${{ env.ENVIRONMENT }}"
           APP_NAME: "${{ vars.APP_NAME }}"
           GCP_REGION: "europe-west1"
