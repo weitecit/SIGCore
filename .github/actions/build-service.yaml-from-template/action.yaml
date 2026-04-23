@@ -68,8 +68,8 @@ runs:
   steps:
     - name: Load inputs into env
       run: |
-        echo "GCP_PROJECT_ID=${{ inputs.gcp-project-id }} >> $GITHUB_ENV
-        echo "GCP_REGION=${{ inputs.region }} >> $GITHUB_ENV
+        echo "GCP_PROJECT_ID=${{ inputs.gcp-project-id }}" >> $GITHUB_ENV
+        echo "GCP_REGION=${{ inputs.region }}" >> $GITHUB_ENV
 
         echo "CR_SERVICE_NAME=${{ inputs.service-name }}" >> $GITHUB_ENV
         echo "CR_MAX_SCALE=${{ inputs.instances-max-scale }}" >> $GITHUB_ENV
@@ -77,7 +77,7 @@ runs:
         echo "CR_APP_MAX_REQUES_BYTES=${{ inputs.max-request-bytes }}" >> $GITHUB_ENV
         echo "CR_APP_STARTUP_TIMEOUT=${{ inputs.app-startup-timeout }}" >> $GITHUB_ENV
         echo "CR_INGRESS_STATUS=${{ inputs.ingress-status }}" >> $GITHUB_ENV
-        echo "CR_CONNECTOR_NAME=${{ inputs.vpc-connector-name }}"
+        echo "CR_CONNECTOR_NAME=${{ inputs.vpc-connector-name }}" >> $GITHUB_ENV
 
         echo "APP_NAME=${{ inputs.app-name }}" >> $GITHUB_ENV
         echo "APP_IMAGE_URL=${{ inputs.app-docker-image }}" >> $GITHUB_ENV
