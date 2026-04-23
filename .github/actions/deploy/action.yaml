@@ -1,46 +1,15 @@
 name: 'Deploy container image to Cloud Run'
 description: 'Deploy container image to Cloud Run'
 inputs:
-  docker-image:
-    description: 'image:tag'
-    required: true
   gcp-project-id:  
     description: 'GCP_PROJECT_ID'
     required: true
   gcp-sa-key:  
     description: 'GCP_SA_KEY'
     required: true
-  service-name:
-    description: 'Service name in Cloud Run'
+  service.yaml-path:
+    description: 'service.yaml path'
     required: true
-  app-name:  
-    description: 'App name'
-    required: true
-  region:
-    description: 'Region'
-    required: true
-  port:
-    description: 'Port'
-    required: true
-  memory:
-    description: 'Memory (iec)'
-    required: true
-  cpu:
-    description: 'CPU (cores)'
-    required: true
-  min-instances:
-    description: 'Minimum instances for autoscaling'
-    required: true
-  max-instances:
-    description: 'Maximum instances for autoscaling'
-    required: true
-  timeout:
-    description: 'Timeout for deploy (s)'
-    required: true
-  max-request-bytes:
-    description: 'Maximum bytes for request (bytes)'
-    required: false
-    default: 52428800
 
 runs:
   using: "composite"
@@ -56,17 +25,7 @@ runs:
 
     - name: Deploy
       run: |
-        gcloud run deploy ${{ inputs.service-name }} \
-          --image ${{ inputs.docker-image }} \
-          --region ${{ inputs.region }} \
-          --platform managed \
-          --port ${{ inputs.port }} \
-          --memory ${{ inputs.memory }} \
-          --cpu ${{ inputs.cpu }} \
-          --min-instances ${{ inputs.min-instances }} \
-          --max-instances ${{ inputs.max-instances }} \
-          --timeout ${{ inputs.timeout }} \
-          --set-env-vars MAX_REQUEST_BYTES=${{ inputs.max-request-bytes }}
+        gcloud run replace ${{ inputs.service.yaml-path }}
       shell: bash
 
     - name: Logout GCP
