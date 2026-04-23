@@ -33,7 +33,7 @@ spec:
           image: ${APP_IMAGE_URL}
           env:
             - name: MAX_REQUEST_BYTES
-              value: ${CR_APP_MAX_REQUEST_BYTES}
+              value: "${CR_APP_MAX_REQUEST_BYTES}"
           ports:
             - containerPort: ${APP_IMAGE_PORT}
               name: http1
