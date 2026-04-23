@@ -18,7 +18,7 @@ spec:
         autoscaling.knative.dev/maxScale: "${CR_MAX_SCALE}"
         run.googleapis.com/client-name: "gcloud"
         run.googleapis.com/startup-cpu-boost: 'true'
-        run.googleapis.com/vpc-access-connector: "projects/${GCP_PROJECT_NAME}/locations/${GCP_REGION}/connectors/${CR_CONNECTOR_NAME}"
+        run.googleapis.com/vpc-access-connector: "${CR_CONNECTOR_NAME}"
         run.googleapis.com/vpc-access-egress: "all-traffic"
       labels:
         client.knative.dev/nonce: adsfgxblvo
