@@ -39,7 +39,7 @@ spec:
               name: http1
           resources:
             limits:
-              cpu: ${APP_CPU_LIMIT}
+              cpu: "${APP_CPU_LIMIT}"
               memory: ${APP_MEMORY_LIMIT}
           startupProbe:
             failureThreshold: 1
