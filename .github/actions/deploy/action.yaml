@@ -100,6 +100,8 @@ runs:
         envsubst < deploys/service.yaml.template > deploys/service.yaml
 
         gcloud run services replace deploys/service.yaml
+        
+        cat deploys/service.yaml
 
       shell: bash
 
