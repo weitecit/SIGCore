@@ -5,11 +5,11 @@ metadata:
     run.googleapis.com/ingress: "${CR_INGRESS_STATUS}"
     run.googleapis.com/ingress-status: "${CR_INGRESS_STATUS}"
     run.googleapis.com/maxScale: '100'
-    run.googleapis.com/urls: '["https://${CR_SERVICE_NAME}-${GCP_PROJECT_NAME}.${GCP_REGION}.run.app"]'
+    run.googleapis.com/urls: '["https://${CR_SERVICE_NAME}-${GCP_PROJECT_ID}.${GCP_REGION}.run.app"]'
   labels:
     cloud.googleapis.com/location: "${GCP_REGION}"
   name: "${CR_SERVICE_NAME}"
-  namespace: "${GCP_PROJECT_NAME}"
+  namespace: "${GCP_PROJECT_ID}"
 
 spec:
   template:
@@ -26,7 +26,7 @@ spec:
 
     spec:
       containerConcurrency: 80
-      serviceAccountName: ${GCP_PROJECT_NAME}-compute@developer.gserviceaccount.com
+      serviceAccountName: ${GCP_PROJECT_ID}-compute@developer.gserviceaccount.com
       timeoutSeconds: "${CR_TIMEOUT}"
       containers:
         - name: "${APP_NAME}"
