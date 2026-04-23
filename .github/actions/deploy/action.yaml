@@ -7,7 +7,7 @@ inputs:
   gcp-sa-key:  
     description: 'GCP_SA_KEY'
     required: true
-  service.yaml-path:
+  service-yaml-path:
     description: 'service.yaml path'
     required: true
 
@@ -25,7 +25,7 @@ runs:
 
     - name: Deploy
       run: |
-        gcloud run services replace ${{ inputs.service.yaml-path }}
+        gcloud run services replace "${{ inputs.service-yaml-path }}"
       shell: bash
 
     - name: Logout GCP
