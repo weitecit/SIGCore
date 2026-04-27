@@ -42,6 +42,15 @@ def health() -> dict:
 
 @app.post("/api/v1/plots/polygonize", response_model=PlotCollection)
 async def polygonize_plots(request:Request):
+    """
+    Polygonizes plots from SIGPAC data.
+    
+    Args:
+        request (Request): The request object containing the plots data.
+        
+    Returns:
+        PlotCollection: The polygonized plots data.
+    """
     try:
         json_data = await request.json()
         plots_array = json_data['plots']
@@ -70,6 +79,15 @@ async def polygonize_plots(request:Request):
 
 @app.get("/api/v1/plots/area/{parcel_id}")
 async def get_parcel_area(parcel_id:str):
+    """
+    Gets the total area of a parcel.
+    
+    Args:
+        parcel_id (str): The ID of the parcel.
+        
+    Returns:
+        float: The total area of the parcel.
+    """
     try:
         plot_list = mongo_api.get_parcelario_by_id(parcel_id)
         if not 'dn_surface' in plot_list.columns:
@@ -87,10 +105,13 @@ async def get_parcel_area(parcel_id:str):
 @app.get("/api/v1/plots/{parcel_id}", response_model=PlotCollection)
 async def get_field(parcel_id:str):
     """
-    Endpoint to get the plot list of a field.
+    Gets the plot list of a field.
     
-    Returns a Json with the plot list data.
-    
+    Args:
+        parcel_id (str): The ID of the parcel.
+        
+    Returns:
+        PlotCollection: The plot list data.
     """
     try:
         parcelario_gdf= mongo_api.get_parcelario_by_id(parcel_id)
@@ -104,6 +125,18 @@ async def get_field(parcel_id:str):
 
 @app.get("/api/v1/plots/centroid/{parcel_id}")
 async def get_field_centroid(parcel_id:str):
+    """
+    Gets the centroid of a field.
+    
+    Args:
+        parcel_id (str): The ID of the parcel.
+        
+    Returns:
+        dict:
+            - x (float): The x coordinate of the centroid.
+            - y (float): The y coordinate of the centroid.
+            - crs (str): The CRS of the centroid.
+    """
     try:
         centroid = mongo_api.get_parcel_centroid(parcel_id, crs=32630)
         out_json = {
@@ -120,6 +153,19 @@ async def get_field_centroid(parcel_id:str):
 
 @app.get("/api/v1/plots/extent/{parcel_id}")
 async def get_field_extent(parcel_id:str):
+    """
+    Gets the extent of a field.
+    
+    Args:
+        parcel_id (str): The ID of the parcel.
+        
+    Returns:
+        list: The extent of the field.
+            - minx (float): The minimum x coordinate.
+            - miny (float): The minimum y coordinate.
+            - maxx (float): The maximum x coordinate.
+            - maxy (float): The maximum y coordinate.
+    """
     try:
         parcelario_gdf = mongo_api.get_parcelario_by_id(parcel_id)
         extent = parcelario_gdf.to_crs(32630).total_bounds.tolist()  # [minx, miny, maxx, maxy]
