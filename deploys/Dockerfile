@@ -47,4 +47,4 @@ WORKDIR /app
 
 
 # Use exec form and ensure Python runs unbuffered for immediate log output
-CMD ["python", "-u", "main.py"]
+CMD ["python", "-u", "main.py 2>&1 | tee /shared-logs/app.log"]
