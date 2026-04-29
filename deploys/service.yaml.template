@@ -28,6 +28,13 @@ spec:
       containerConcurrency: 80
       serviceAccountName: ${GCP_PROJECT_ID}-compute@developer.gserviceaccount.com
       timeoutSeconds: "${CR_TIMEOUT}"
+
+      volumes:
+        - name: shared-logs
+          emptyDir:
+            medium: Memory
+            sizeLimit: 128Mi
+
       containers:
         - name: "${APP_NAME}"
           image: "${APP_IMAGE_URL}"
@@ -41,6 +48,11 @@ spec:
             limits:
               cpu: "${APP_CPU_LIMIT}"
               memory: "${APP_MEMORY_LIMIT}"
+          volumeMounts:
+            - name: shared-logs
+              mountPath: /shared-logs
+
+
           startupProbe:
             failureThreshold: 1
             periodSeconds: 240
@@ -50,3 +62,7 @@ spec:
 
         - name: promtail
           image: "${PROMTAIL_IMAGE_URL}"
+          volumeMounts:
+            - name: shared-logs
+              mountPath: /shared-logs
+

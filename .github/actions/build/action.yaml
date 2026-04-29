@@ -26,7 +26,10 @@ runs:
       run: |
         BUILD_ARGS=()
 
-        while IFS='=' read -r name value; do
+        while IFS= read -r line; do
+          name="${line%%=*}"
+          value="${line#*=}"
+
           if [[ "$name" =~ ^ACTIONS_(.*) ]]; then
             real_name="${BASH_REMATCH[1]}"
             BUILD_ARGS+=(--build-arg "$real_name=$value")
