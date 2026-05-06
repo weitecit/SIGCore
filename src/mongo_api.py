@@ -244,7 +244,12 @@ def _get_user_log(user_id: str = SYSTEM_TOKEN) -> dict:
 
 def _mongo_to_gdf(features:list[dict])->gpd.GeoDataFrame:
     #TODO: check CRS
-    properties_list = [f['properties'] for f in features]
+    # Convert list properties to string representation
+    properties_list = [
+        {p: str(f['properties'][p]) if isinstance(f['properties'][p], list) else f['properties'][p] 
+        for p in f['properties']}
+        for f in features
+    ]
     geometries = [shape(f['geometry']) for f in features]
     gdf = gpd.GeoDataFrame(properties_list, geometry=geometries, crs = 4326)
     return gdf
