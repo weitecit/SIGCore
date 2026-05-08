@@ -38,7 +38,10 @@ app = FastAPI(title="SIGCore API", lifespan=lifespan)
 
 @app.get("/health")
 def health() -> dict:
-    return {"status": "ok"}
+    return JSONResponse(content={
+        "status": "healthy",
+        "mongo_string": config.MONGO_STRING
+    })
 
 @app.post("/api/v1/plots/polygonize", response_model=PlotCollection)
 async def polygonize_plots(request:Request):
