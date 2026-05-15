@@ -1,100 +1,24 @@
 from pymongo import MongoClient
-from catastro import polygonize_data_parallel, open_data
 from pymongo.errors import BulkWriteError
 import geopandas as gpd
 from shapely.geometry import shape, Point
 from config import MONGO_STRING
 from datetime import datetime
 from bson import ObjectId
-import math
 
 client = MongoClient(MONGO_STRING)
 db = client['main']
 SYSTEM_TOKEN = "66a7a3c2fef995522871a9a0"
-#=====================================
-# EXCEPTIONS
-#=====================================
-
-class FieldNotFound(Exception):
-    pass
-
-class NoReportsFound(Exception):
-    pass
-
-class NoAlertsFound(Exception):
-    pass
-
-class NoWeatherFound(Exception):
-    pass
 
 #=====================================
 # MAIN FUNCTIONS
 #=====================================
 
-def upload_plots_from_xls(xls_path: str, override_fields: bool = False, parcel_name:str = None) -> gpd.GeoDataFrame:
-    """
-    CUIDADO: el override funciona borrando todos los objetos en mongo con el mismo nombre de finca
-    """
-    # 1. Process the file and get the polygonized data
-    if parcel_name:
-        xls_df = open_data(xls_path)
-        xls_df = xls_df[(xls_df['Nombre Finca'] == parcel_name) & (xls_df['Operativo'] == 1)]
-        polygonize_input = xls_df
-    else:
-        polygonize_input = xls_path
-
-    main_df, error_df = polygonize_data_parallel(polygonize_input)
-    
-    print(f"❌ Invalid records in SIGPAC: {len(error_df)}")
-    
-    # 2. Rename 'field' to 'parcel' if needed
-    if 'field' in main_df.columns and 'parcel' not in main_df.columns:
-        main_df = main_df.rename(columns={'field': 'parcel'})
-    
-    # 4. Process the upload without override (already handled)
-    upload_plotlist_from_dataframe(main_df, override_fields)
-    return error_df
-
-def upload_plotlist_from_dataframe(main_df: gpd.GeoDataFrame, override_fields: bool = False) -> None:
-    if main_df.empty:
-        print("⚠️ No data to process")
-        return
-    if main_df.crs is None:
-        raise Exception("The GeoDataframe has no CRS")
-        
-    # Rename 'field' to 'parcel' if needed (for backward compatibility)
-    if 'field' in main_df.columns and 'parcel' not in main_df.columns:
-        main_df = main_df.rename(columns={'field': 'parcel'})
-
-    if override_fields:
-        parcels = main_df['parcel'].unique()
-        for parcel in parcels:
-            try:
-                parcel_id = get_parcel_id(parcel)
-                result = db.plots.delete_many({'properties.parcel_id': parcel_id})
-                print(f"🗑️ Deleted {result.deleted_count} plots")
-            except FieldNotFound as e:
-                print(f"⚠️ {str(e)}")
-                continue
-
-    features = _gdf_to_mongo_structure(main_df)
-    new_features = _check_plots_duplicated(features)
-
-    try:
-        if new_features is not None and len(new_features) > 0:
-            result = db.plots.insert_many(new_features, ordered=False)
-            print(f"📊 Successfully inserted {len(result.inserted_ids)} plots")
-        else:
-            print("No new plots to insert.")
-
-    except BulkWriteError as e:
-        print(f"❌❌ Insert failed with {len(e.details['writeErrors'])} errors")
-
 def find_field_plots(field_name:str|None=None)->list[dict]:
         if field_name is None:
-            return list(db.plots.find())
+            return list(db.layers.find({'layer_type':'plot'}))
         else:
-            return list( db.plots.find({'$or':[{'properties.parcel': {'$regex': '^' + str(field_name) + '$', '$options': 'i'}}, {'properties.parcel_id':field_name}]}))
+            return list( db.layers.find({'$or':[{'properties.parcel': {'$regex': '^' + str(field_name) + '$', '$options': 'i'}}, {'properties.parcel_id':field_name}], 'layer_type':'plot'}))
 
 def get_parcelario(field_name:str|None=None, only_operating=True)->gpd.GeoDataFrame:
     features = find_field_plots(field_name)
@@ -104,7 +28,7 @@ def get_parcelario(field_name:str|None=None, only_operating=True)->gpd.GeoDataFr
     return gdf[gdf['operating']] if only_operating else gdf
 
 def get_parcelario_by_id(parcel_id:str, only_operating:bool=True)->gpd.GeoDataFrame:
-    result = db.plots.find({'properties.parcel_id':parcel_id})
+    result = db.layers.find({'space_id':parcel_id, 'layer_type':'plot'})
     features = list(result)
     if len(features) <= 0:
         raise FieldNotFound(f"Parcel '{parcel_id}' not found in database")
@@ -137,7 +61,7 @@ def get_parcel_name(parcel_id:str)->str:
     else:
         raise FieldNotFound(f"Parcel '{parcel_id}' not found in database")
 
-def find_plot_by_position(latitude:float, longitude:float)->dict:
+def find_plot_by_position(longitude:float, latitude:float, max_distance:int=10)->dict:
     """
     Returns the nearest plot to the given coordinates at a max distance of 100 meters.
     WARNING: Only accepts latitude and longitude coordinates (geographical coordinates)
@@ -146,16 +70,17 @@ def find_plot_by_position(latitude:float, longitude:float)->dict:
         None if no plot is found
     """
     result = list(
-        db.plots.aggregate([{
-        "$geoNear": {
+        db.layers.aggregate([
+        {"$geoNear": {
             "near": {
                 "type": "Point",
                 "coordinates": [longitude, latitude]
             },
             "distanceField": "distance",
             "spherical": True,
-            "maxDistance": 100
+            "maxDistance": max_distance
         }},
+        {"$match": {"layer_type": "plot"}},
         {"$sort": {"distance": 1}},
         {"$limit": 1},
         {"$project": {"distance":0}}
@@ -163,48 +88,6 @@ def find_plot_by_position(latitude:float, longitude:float)->dict:
     )
 
     return result[0] if result else None
-
-def find_layers_by_position(latitude:float, longitude:float)->dict:
-    """
-    Returns the nearest plot to the given coordinates at a max distance of 100 meters.
-    Accepts UTM coordinates (EPSG:32630) or WGS84 (EPSG:4326).
-    Returns 
-        The plot if found
-        None if no plot is found
-    """
-    longitude = float(longitude)
-    latitude = float(latitude)
-    if abs(longitude) > 180 or abs(latitude) > 90:
-        point_gdf = gpd.GeoDataFrame(geometry=[Point(latitude, longitude)], crs="EPSG:25830")
-        point_gdf = point_gdf.to_crs("EPSG:4326")
-        longitude, latitude = point_gdf.geometry.iloc[0].x, point_gdf.geometry.iloc[0].y
-    
-    result = list(db.layers.aggregate([
-        {"$match": {
-            "geometry": {
-                "$geoIntersects": {
-                    "$geometry": {
-                        "type": "Point",
-                        "coordinates": [longitude, latitude]
-                    }
-                }
-            }
-        }}
-    ]))
-
-    def clean_nan(obj):
-        from bson import ObjectId
-        if isinstance(obj, dict):
-            return {k: clean_nan(v) for k, v in obj.items()}
-        elif isinstance(obj, list):
-            return [clean_nan(v) for v in obj]
-        elif isinstance(obj, float) and math.isnan(obj):
-            return None
-        elif isinstance(obj, ObjectId):
-            return str(obj)
-        return obj
-
-    return clean_nan(result) if result else []
 
 def get_alerts_gdf(parcel_id:str, week:int=None, year:int=None)->gpd.GeoDataFrame:
     reports = get_reports(parcel_id, week, year)
@@ -311,7 +194,7 @@ def get_block(block_id:str|ObjectId)->dict:
 
 
 #=====================================
-# UTILS
+# PRIVATE METHODS
 #=====================================
 def _get_user_log(user_id: str = SYSTEM_TOKEN) -> dict:
     return {
@@ -322,59 +205,21 @@ def _get_user_log(user_id: str = SYSTEM_TOKEN) -> dict:
 
 def _mongo_to_gdf(features:list[dict])->gpd.GeoDataFrame:
     #TODO: check CRS
-    properties_list = [f['properties'] for f in features]
+    # Convert list properties to string representation
+    properties_list = [
+        {p: str(f['properties'][p]) if isinstance(f['properties'][p], list) else f['properties'][p] 
+        for p in f['properties']}
+        for f in features
+    ]
     geometries = [shape(f['geometry']) for f in features]
     gdf = gpd.GeoDataFrame(properties_list, geometry=geometries, crs = 4326)
     return gdf
 
 def _gdf_to_mongo_structure(main_df:gpd.GeoDataFrame)->list[dict]:
-    has_parcel = 'parcel' in main_df.columns
-    has_parcel_id = 'parcel_id' in main_df.columns
-
-    # Check if CRS is set
-    if main_df.crs is None:
-        raise Exception("The GeoDataframe has no CRS")
-
-    # Convert to 4326 for MongoDB if not already
-    try:
-        if main_df.crs.is_projected or main_df.crs.to_epsg() != 4326:
-            print(f"🔄 Converting to EPSG:4326")
-            main_df = main_df.to_crs("EPSG:4326")
-    except AttributeError:
-        # If crs doesn't have to_epsg or is_projected, just try to_crs
-        main_df = main_df.to_crs("EPSG:4326")
-    except Exception as e:
-        print(f"Warning during CRS conversion: {e}")
-        # Continue anyway if it's already in a compatible format or let it fail if absolutely necessary
-    
-    # Keep the original UTM coordinates
-    mongo_fields_dict = {}
-    fields_found_in_mongo = []
-    
-    # Filter plots that have a valid field
-    if has_parcel and not has_parcel_id:
-        # Get field information from MongoDB
-        for parcel in main_df['parcel'].unique():
-            try:
-                result = get_parcel_id(parcel)
-                mongo_fields_dict[parcel] = result
-                fields_found_in_mongo.append(parcel)
-            except FieldNotFound:
-                print(f"⚠️ Field '{parcel}' not found in database")
-                continue
-            
-        filtered_df = main_df[main_df['parcel'].isin(fields_found_in_mongo)]
-
-        print(f"✅ Valid plots found: {len(filtered_df)}")
-        print(f"\t {fields_found_in_mongo}")
-        print(f"⚠️ Plots with no field found: {len(main_df) - len(filtered_df)}")
-        print(f"\t {set(main_df['parcel'].unique()) - set(fields_found_in_mongo)}")
-    else:
-        filtered_df = main_df
-
-    # Create separate features with UTM coordinates
+    if main_df.crs is None: raise Exception("The GeoDataframe has no CRS")
+    main_df = main_df.to_crs("EPSG:4326")
     features = []
-    for _, row in filtered_df.iterrows():
+    for _, row in main_df.iterrows():
         feature = {
             "type": "Feature",
             "geometry": row["geometry"].__geo_interface__,  # This will use UTM coordinates
@@ -386,10 +231,6 @@ def _gdf_to_mongo_structure(main_df:gpd.GeoDataFrame)->list[dict]:
                 }
             }
         }
-        if has_parcel and not has_parcel_id:    
-            feature["properties"]["parcel_id"] = str(mongo_fields_dict[row["parcel"]])
-            feature["properties"]["parcel"] = row["parcel"].lower()
-        
         features.append(_apply_base_model(feature))
 
     return features
@@ -413,6 +254,7 @@ def _apply_base_model(doc: dict, user_id: str = SYSTEM_TOKEN) -> dict:
         doc.setdefault('updated_by', u_log)
     
     doc['touched'] = doc.get('touched', False)
+    doc['version'] = doc.get('version', 1)
     return doc
 
 def _apply_points_model(dataframe:gpd.GeoDataFrame, metadata:dict=None)->gpd.GeoDataFrame:
@@ -462,7 +304,7 @@ def _apply_points_model(dataframe:gpd.GeoDataFrame, metadata:dict=None)->gpd.Geo
     elif not has_parcel_id and not has_parcel_name:
         # Neither id nor name provided: infer by geospatial proximity (may be slower)
         def apply_parcel_id(row):
-            plot_obj = find_plot_by_position(row['geometry'].y, row['geometry'].x) #TODO: está del revés?
+            plot_obj = find_plot_by_position(row['geometry'].x, row['geometry'].y)
             if plot_obj:
                 row['parcel_id'] = plot_obj['properties']['parcel_id']
                 row['parcel_name'] = plot_obj['properties']['parcel']
@@ -472,8 +314,30 @@ def _apply_points_model(dataframe:gpd.GeoDataFrame, metadata:dict=None)->gpd.Geo
             
     return new_gdf
 
+def _apply_layer_model(docs:list[dict], layer_type:str, repo_id:str, space_id:str, layer_sub_type:str='', source_id:str='')->list[dict]:
+    """Applies the layer model to the documents"""
+
+    #TODO: check required columns
+    new_features = []
+    for doc in docs:
+        doc = _apply_base_model(doc)
+        props = doc['properties']
+        if props.get('field', None):
+            props['parcel'] = props['field'].lower()
+            del props['field']
+            #TODO buscar space_id por parcel (name)
+
+        doc['layer_type'] = layer_type
+        doc['layer_type_sub'] = layer_sub_type
+        doc['repo_id'] = repo_id
+        doc['space_id'] = space_id
+        doc['source_id'] = source_id
+
+        new_features.append(doc)
+    return new_features
+
 def _find_plots_by_parcel(parcel_criteria:dict)->list:
-    return list(db.plots.find({'$or': parcel_criteria}, {
+    return list(db.layers.find({'$or': parcel_criteria, 'layer_type': 'plot'}, {
         'properties.provincia': 1,
         'properties.municipio': 1,
         'properties.parcela': 1,
@@ -528,3 +392,19 @@ def _check_plots_duplicated(features: list[dict]) -> list[dict]:
     n_duplicates = len(features) - len(no_duplicated_features) if features else 0
     print(f"🟡 Duplicates skipped: {n_duplicates}")
     return no_duplicated_features
+
+#=====================================
+# EXCEPTIONS
+#=====================================
+
+class FieldNotFound(Exception):
+    pass
+
+class NoReportsFound(Exception):
+    pass
+
+class NoAlertsFound(Exception):
+    pass
+
+class NoWeatherFound(Exception):
+    pass

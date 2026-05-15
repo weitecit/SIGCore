@@ -16,7 +16,7 @@ class PlotProperties(BaseModel):
     zona: int
     poligono: int
     parcela: int
-    recinto: int
+    #recinto: int
     #parcel: str
     #client: str
     #crop: str

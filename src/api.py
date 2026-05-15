@@ -1,4 +1,3 @@
-
 """
 API module for SIGCore.
 """
@@ -38,7 +37,11 @@ app = FastAPI(title="SIGCore API", lifespan=lifespan)
 
 @app.get("/health")
 def health() -> dict:
-    return {"status": "ok"}
+    return JSONResponse(content={
+        "status": "healthy",
+        "SIGPAC": catastro.check_sigpac_service_status(),
+        "MongoDB": mongo_api.db.command('ping')
+    })
 
 @app.post("/api/v1/plots/polygonize", response_model=PlotCollection)
 async def polygonize_plots(request:Request):

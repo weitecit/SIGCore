@@ -12,6 +12,10 @@ from config import REQUIRED_COLUMNS, ASSETS_FOLDER
 class SigpacError(Exception):
     pass
 
+def check_sigpac_service_status():
+    response = requests.get('https://desarrollo.tragsatec.es/ogc-api-feature/')
+    return response.status_code
+
 def polygonize_data_parallel(
     input_data: str | dict | pd.DataFrame,
     max_workers: int = 10,
@@ -22,12 +26,9 @@ def polygonize_data_parallel(
     """
 
     #Check if SIGPAC service is available
-    try:
-        response = requests.get('https://desarrollo.tragsatec.es/ogc-api-feature/')
-        if response.status_code != 200:
-            raise Exception('Response: ' + str(response.status_code) + ' - ' + response.text)
-    except Exception as e:
-        raise SigpacError('SIGPAC service is not available: ' + str(e)) from e
+    status_code = check_sigpac_service_status()
+    if status_code != 200:
+        raise SigpacError(f'SIGPAC service is not available. Status code: {status_code}')
     
     df_input = open_data(input_data)
 
