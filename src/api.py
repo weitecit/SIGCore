@@ -37,10 +37,21 @@ app = FastAPI(title="SIGCore API", lifespan=lifespan)
 
 @app.get("/health")
 def health() -> dict:
+
+    try:
+        sigpac_status = catastro.check_sigpac_service_status()
+    except Exception as e:
+        sigpac_status = {"status": "unhealthy", "error": str(e)}
+    
+    try:
+        mongodb_status = mongo_api.db.command('ping')
+    except Exception as e:
+        mongodb_status = {"status": "unhealthy", "error": str(e)}
+    
     return JSONResponse(content={
         "status": "healthy",
-        "SIGPAC": catastro.check_sigpac_service_status(),
-        "MongoDB": mongo_api.db.command('ping')
+        "SIGPAC": sigpac_status,
+        "MongoDB": mongodb_status
     })
 
 @app.post("/api/v1/plots/polygonize", response_model=PlotCollection)
