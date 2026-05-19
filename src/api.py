@@ -7,13 +7,14 @@ import logging
 import json
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
+from bson import json_util
 
 #INTERNAL IMPORTS
 import config
 import catastro
 import mongo_api
 from schemas import PlotCollection
-from bson import json_util
+
 
 #Logger initialization
 @asynccontextmanager
@@ -45,7 +46,7 @@ def health() -> dict:
         sigpac_status = {"status": "unhealthy", "error": str(e)}
     
     try:
-        mongodb_status = json_util.dumps(mongo_api.db.command('ping'))
+        mongodb_status = "healthy" if mongo_api.db.command('ping').get('ok') == 1 else "unhealthy"
     except Exception as e:
         mongodb_status = {"status": "unhealthy", "error": str(e)}
     
