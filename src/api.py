@@ -13,6 +13,7 @@ import config
 import catastro
 import mongo_api
 from schemas import PlotCollection
+from bson import json_util
 
 #Logger initialization
 @asynccontextmanager
@@ -44,7 +45,7 @@ def health() -> dict:
         sigpac_status = {"status": "unhealthy", "error": str(e)}
     
     try:
-        mongodb_status = mongo_api.db.command('ping')
+        mongodb_status = json_util.dumps(mongo_api.db.command('ping'))
     except Exception as e:
         mongodb_status = {"status": "unhealthy", "error": str(e)}
     
