@@ -151,3 +151,7 @@ Desktop.ini
 
 #Github Acions
 !.github/actions/build
+
+#CUSTOM
+provinces/
+logs/

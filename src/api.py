@@ -93,6 +93,32 @@ async def polygonize_plots(request:Request):
     except Exception as e:
         return JSONResponse(content={"message": str(e)}, status_code=500)
 
+@app.post("/api/v2/plots/polygonize", response_model=PlotCollection)
+async def polygonize_plots(request:Request):
+    try:
+        json_data = await request.json()
+        plots_array = json_data['plots']
+        main_gdf, error_df = catastro.polygonize_data(plots_array)
+
+        if not main_gdf.empty:
+            return JSONResponse(
+                content={
+                    "polygonized_data": json.loads(main_gdf.to_json()),
+                    "errors": error_df.to_dict(orient='records')
+                },
+                status_code=200
+            )
+        else:
+            return JSONResponse(content={
+                "message": "No valid plots found.", 
+                "errors": error_df.to_dict(orient='records'), 
+                "polygonized_data": []}, 
+                status_code=200)
+    except KeyError as e:
+        return JSONResponse(content={"message": str(e)}, status_code=400)
+    except Exception as e:
+        return JSONResponse(content={"message": str(e)}, status_code=500)
+
 @app.get("/api/v1/plots/area/{parcel_id}")
 async def get_parcel_area(parcel_id:str):
     """
