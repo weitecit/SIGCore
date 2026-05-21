@@ -13,7 +13,7 @@ class SigpacError(Exception):
     pass
 
 def check_sigpac_service_status():
-    response = requests.get('https://desarrollo.tragsatec.es/ogc-api-feature/')
+    response = requests.get('https://desarrollo.tragsatec.es/ogc-api-feature/', timeout=5)
     return response.status_code
 
 def polygonize_data_parallel(
@@ -168,10 +168,10 @@ def _adapt_columns(dataframe:pd.DataFrame)->pd.DataFrame:
 def _download_plot_file(prov:int, mun:int, pol:int, par:int, rec:int=None)->gpd.GeoDataFrame:
     if rec is None or math.isnan(rec):
         req_string = f"{prov}/{mun}/0/0/{pol}/{par}.geojson"
-        r = requests.get(f'https://sigpac-hubcloud.es/servicioconsultassigpac/query/recinfoparc/{req_string}')
+        r = requests.get(f'https://sigpac-hubcloud.es/servicioconsultassigpac/query/recinfoparc/{req_string}', timeout=15)
     else:
         req_string = f"{prov}/{mun}/0/0/{pol}/{par}/{rec}.geojson"
-        r = requests.get(f'https://sigpac-hubcloud.es/servicioconsultassigpac/query/recinfo/{req_string}')
+        r = requests.get(f'https://sigpac-hubcloud.es/servicioconsultassigpac/query/recinfo/{req_string}', timeout=15)
     if r.status_code != 200:
         raise KeyError(f'Error getting plot file {req_string}: {r.content}')
         
