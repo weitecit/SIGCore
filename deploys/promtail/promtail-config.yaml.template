@@ -14,6 +14,7 @@ scrape_configs:
       - targets:
           - localhost
         labels:
-          job: app
+          job: sigcore-${ENVIRONMENT}
+          service_name: sigcore-${ENVIRONMENT}
           __path__: /shared-logs/app.log
 

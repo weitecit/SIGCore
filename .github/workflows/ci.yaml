@@ -28,6 +28,7 @@ jobs:
 
       - name: Get promtail config from template
         env:
+          ENVIRONMENT: ${{ vars.ENVIRONMENT }}
           LOKI_URL: ${{ vars.LOKI_URL }}
         run: |
           envsubst < deploys/promtail/promtail-config.yaml.template > deploys/promtail/promtail-config.yaml
