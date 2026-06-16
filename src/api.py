@@ -93,7 +93,7 @@ async def polygonize_plots(request:Request):
     except Exception as e:
         return JSONResponse(content={"message": str(e)}, status_code=500)
 
-@app.post("/api/v2/plots/polygonize", response_model=PlotCollection)
+@app.post("/api/v1/plots/backdoor_polygonize", response_model=PlotCollection)
 async def polygonize_plots(request:Request):
     try:
         json_data = await request.json()
