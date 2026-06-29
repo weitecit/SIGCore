@@ -198,8 +198,9 @@ def polygonize_data_parallel(
     out_data.drop_duplicates(subset=['geometry'], inplace=True)
 
     print('DONE!')
-    if len(out_data) > 0 and 'field' in out_data.columns:
-        print('Fields detected: ', len(out_data['field'].unique()), out_data['field'].unique())
+    if len(out_data) > 0:
+        if 'field' in out_data.columns:
+            print('Fields detected: ', len(out_data['field'].unique()), out_data['field'].unique())
         if out_data.crs is None:
             out_data = out_data.set_crs('EPSG:4258')
         else:
