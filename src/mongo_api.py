@@ -14,14 +14,24 @@ SYSTEM_TOKEN = "66a7a3c2fef995522871a9a0"
 # MAIN FUNCTIONS
 #=====================================
 
-def find_field_plots(field_name:str|None=None)->list[dict]:
-        if field_name is None:
-            return list(db.layers.find({'layer_type':'plot'}))
-        else:
-            return list( db.layers.find({'$or':[{'properties.parcel': {'$regex': '^' + str(field_name) + '$', '$options': 'i'}}, {'properties.parcel_id':field_name}], 'layer_type':'plot'}))
+def find_field_plots(field_name:str|None=None, client:str|None=None)->list[dict]:
+        base_filter: dict = {'layer_type': 'plot'}
+        if client:
+            base_filter['properties.client'] = client
 
-def get_parcelario(field_name:str|None=None, only_operating=True)->gpd.GeoDataFrame:
-    features = find_field_plots(field_name)
+        if field_name is None:
+            return list(db.layers.find(base_filter))
+        else:
+            return list(db.layers.find({
+                **base_filter,
+                '$or': [
+                    {'properties.parcel': {'$regex': '^' + str(field_name) + '$', '$options': 'i'}},
+                    {'properties.parcel_id': field_name}
+                ]
+            }))
+
+def get_parcelario(field_name:str|None=None, client:str|None=None, only_operating=True)->gpd.GeoDataFrame:
+    features = find_field_plots(field_name, client)
     if len(features)<=0:
         raise FieldNotFound(f"Field '{field_name}' not found in database")
     gdf = _mongo_to_gdf(features).to_crs(4258)
@@ -207,8 +217,11 @@ def _mongo_to_gdf(features:list[dict])->gpd.GeoDataFrame:
     #TODO: check CRS
     # Convert list properties to string representation
     properties_list = [
-        {p: str(f['properties'][p]) if isinstance(f['properties'][p], list) else f['properties'][p] 
-        for p in f['properties']}
+        {
+            **{p: str(f['properties'][p]) if isinstance(f['properties'][p], list) else f['properties'][p] 
+                for p in f['properties']},
+            'created_datetime': f.get('created_by', {}).get('time')
+        }
         for f in features
     ]
     geometries = [shape(f['geometry']) for f in features]
