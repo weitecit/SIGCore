@@ -187,21 +187,24 @@ def save_kpis(kpi_data: list[dict]):
 
     db.kpis.insert_many(kpi_data)
 
-def get_block(block_id:str|ObjectId)->dict:
-    try:
-        if isinstance(block_id, str):
-            oid = ObjectId(block_id)
-        else:
-            oid = block_id
-            
-        result = db.blocks.find_one({'_id':oid})
-        if result is None:
-            raise FieldNotFound(f"Block '{block_id}' not found")
-        return result
-    except Exception as e:
-        # If not a valid ObjectId or other error
-        raise FieldNotFound(f"Invalid block ID or not found: {block_id}. Error: {e}")
+def get_weifield_points(samplers:list[str])->gpd.GeoDataFrame:
+    results = list(db.points.find({
+        'properties.source_name': 'weifield',
+        'created_by.user': {'$in': samplers}
+    }))
+    samplers_oid = [ObjectId(s) for s in samplers]
+    user_names = {str(u['_id']): u['nick'] for u in
+                  list(db.users.find({'_id': {'$in': samplers_oid}}, {'_id': 1, 'nick': 1}))}
+    gdf = _mongo_to_gdf(results)
+    gdf['user_register'] = gdf.apply(lambda x: user_names.get(str(x['created_by'])), axis=1)
+    return gdf
 
+def get_weifield_samplers()->dict:
+    #find unique user ids that have created points in 'weifield'
+    sampler_ids =  list(db.points.distinct('created_by.user', {'properties.source_name': 'weifield'}))
+    sampler_ids = [ObjectId(s) for s in sampler_ids]
+    user_names = {str(u['_id']): u['nick'] for u in list(db.users.find({'_id': {'$in': sampler_ids}}, {'_id': 1, 'nick': 1}))}
+    return user_names
 
 #=====================================
 # PRIVATE METHODS
@@ -215,11 +218,9 @@ def _get_user_log(user_id: str = SYSTEM_TOKEN) -> dict:
 
 def _mongo_to_gdf(features:list[dict])->gpd.GeoDataFrame:
     #TODO: check CRS
-    # Convert list properties to string representation
     properties_list = [
         {
-            **{p: str(f['properties'][p]) if isinstance(f['properties'][p], list) else f['properties'][p] 
-                for p in f['properties']},
+            **f['properties'],
             'created_datetime': f.get('created_by', {}).get('time')
         }
         for f in features
