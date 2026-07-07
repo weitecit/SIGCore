@@ -187,7 +187,7 @@ def save_kpis(kpi_data: list[dict]):
 
     db.kpis.insert_many(kpi_data)
 
-def get_weifield_points(samplers:list[str])->gpd.GeoDataFrame:
+def get_weifield_points(samplers:list[str], reduce=False)->gpd.GeoDataFrame:
     results = list(db.points.find({
         'properties.source_name': 'weifield',
         'created_by.user': {'$in': samplers}
@@ -197,6 +197,9 @@ def get_weifield_points(samplers:list[str])->gpd.GeoDataFrame:
                   list(db.users.find({'_id': {'$in': samplers_oid}}, {'_id': 1, 'nick': 1}))}
     gdf = _mongo_to_gdf(results)
     gdf['user_register'] = gdf.apply(lambda x: user_names.get(str(x['created_by'])), axis=1)
+    if reduce:
+        gdf = gdf[['title', 'user_register', 'geometry', 'created_datetime', 'horizontal_accuracy', 'severity']]
+        gdf.rename(columns={'created_datetime': 'datetime'}, inplace=True)
     return gdf
 
 def get_weifield_samplers()->dict:
