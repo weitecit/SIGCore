@@ -38,8 +38,7 @@ def get_parcelario(field_name:str|None=None, client:str|None=None, only_operatin
     return gdf[gdf['operating']] if only_operating else gdf
 
 def get_parcelario_by_id(parcel_id:str, only_operating:bool=True)->gpd.GeoDataFrame:
-    result = db.layers.find({'space_id':parcel_id, 'layer_type':'plot'})
-    features = list(result)
+    features = list(db.layers.find({'space_id':parcel_id, 'layer_type':'plot'}))
     if len(features) <= 0:
         raise FieldNotFound(f"Parcel '{parcel_id}' not found in database")
     gdf = _mongo_to_gdf(features).to_crs(4258)
@@ -224,33 +223,14 @@ def _mongo_to_gdf(features:list[dict])->gpd.GeoDataFrame:
     properties_list = [
         {
             **f['properties'],
-            'created_datetime': f.get('created_by', {}).get('time')
+            'created_datetime': f.get('created_by', {}).get('time'),
+            '_id':str(f.get('_id'))
         }
         for f in features
     ]
     geometries = [shape(f['geometry']) for f in features]
     gdf = gpd.GeoDataFrame(properties_list, geometry=geometries, crs = 4326)
     return gdf
-
-def _gdf_to_mongo_structure(main_df:gpd.GeoDataFrame)->list[dict]:
-    if main_df.crs is None: raise Exception("The GeoDataframe has no CRS")
-    main_df = main_df.to_crs("EPSG:4326")
-    features = []
-    for _, row in main_df.iterrows():
-        feature = {
-            "type": "Feature",
-            "geometry": row["geometry"].__geo_interface__,  # This will use UTM coordinates
-            "properties": row.drop("geometry").to_dict(),
-            "crs": {
-                "type": "name",
-                "properties": {
-                    "name": "EPSG:4326"
-                }
-            }
-        }
-        features.append(_apply_base_model(feature))
-
-    return features
 
 def _apply_base_model(doc: dict, user_id: str = SYSTEM_TOKEN) -> dict:
     u_log = _get_user_log(user_id)
@@ -273,142 +253,6 @@ def _apply_base_model(doc: dict, user_id: str = SYSTEM_TOKEN) -> dict:
     doc['touched'] = doc.get('touched', False)
     doc['version'] = doc.get('version', 1)
     return doc
-
-def _apply_points_model(dataframe:gpd.GeoDataFrame, metadata:dict=None)->gpd.GeoDataFrame:
-    """Only for POINTS metadata"""
-    script_log = _get_user_log()
-
-    default_metadata = {
-        'comments': "",
-        'severity': 0,
-        'use_case': "roturas_hidricas",
-        'hide': False,
-        'position_source': None,
-        'horizontal_accuracy': None,
-        'parcel_id': "",
-        'parcel_name': "",
-        'source_version': 'unknown',
-        'source_name': 'unknown',
-        'sampled_at': datetime.now(),
-        'created_at': datetime.now(),
-        'created_by': script_log,
-        'updated_by': script_log,
-        'photos_ids': [],
-        'validated_at': None,
-        'validated_by': None,
-    }
-
-    #update default metadata
-    if metadata: default_metadata.update(metadata)
-    has_parcel_id = default_metadata['parcel_id']
-    has_parcel_name = default_metadata['parcel_name']
-    new_gdf = dataframe.copy()
-
-    #add default metadata if the column doesnt exists
-    for key, value in default_metadata.items():
-        if key not in new_gdf.columns:
-            if isinstance(value, (list, dict)):
-                new_gdf[key] = [value.copy() for _ in range(len(new_gdf))]
-            else:
-                new_gdf[key] = [value for _ in range(len(new_gdf))]
-
-    # find parcel id and name: prefer direct lookup by id; fallback to geospatial only if neither provided
-    if has_parcel_id and not has_parcel_name:
-        # We already know parcel_id; avoid geo lookup and fetch name directly
-        pid = str(default_metadata['parcel_id'])
-        new_gdf['parcel_name'] = get_parcel_name(pid)
-        
-    elif not has_parcel_id and not has_parcel_name:
-        # Neither id nor name provided: infer by geospatial proximity (may be slower)
-        def apply_parcel_id(row):
-            plot_obj = find_plot_by_position(row['geometry'].x, row['geometry'].y)
-            if plot_obj:
-                row['parcel_id'] = plot_obj['properties']['parcel_id']
-                row['parcel_name'] = plot_obj['properties']['parcel']
-            return row
-
-        new_gdf = new_gdf.to_crs(4326).apply(apply_parcel_id, axis=1)
-            
-    return new_gdf
-
-def _apply_layer_model(docs:list[dict], layer_type:str, repo_id:str, space_id:str, layer_sub_type:str='', source_id:str='')->list[dict]:
-    """Applies the layer model to the documents"""
-
-    #TODO: check required columns
-    new_features = []
-    for doc in docs:
-        doc = _apply_base_model(doc)
-        props = doc['properties']
-        if props.get('field', None):
-            props['parcel'] = props['field'].lower()
-            del props['field']
-            #TODO buscar space_id por parcel (name)
-
-        doc['layer_type'] = layer_type
-        doc['layer_type_sub'] = layer_sub_type
-        doc['repo_id'] = repo_id
-        doc['space_id'] = space_id
-        doc['source_id'] = source_id
-
-        new_features.append(doc)
-    return new_features
-
-def _find_plots_by_parcel(parcel_criteria:dict)->list:
-    return list(db.layers.find({'$or': parcel_criteria, 'layer_type': 'plot'}, {
-        'properties.provincia': 1,
-        'properties.municipio': 1,
-        'properties.parcela': 1,
-        'properties.recinto': 1,
-        '_id': 0
-    }))
-
-def _check_plots_duplicated(features: list[dict]) -> list[dict]:
-    """ Performs a OR-query to fetch existing matches, then filters the input. """
-
-    if not features:
-        print("🟡 Duplicates skipped: 0")
-        return []
-
-    # Build unique criteria to keep the $or query compact
-    keys = [
-        (
-            f['properties']['provincia'],
-            f['properties']['municipio'],
-            f['properties']['parcela'],
-            f['properties']['recinto'],
-        )
-        for f in features
-    ]
-
-    unique_keys = set(keys)
-    query_criteria = [
-        {
-            'properties.provincia': k[0],
-            'properties.municipio': k[1],
-            'properties.parcela': k[2],
-            'properties.recinto': k[3],
-        }
-        for k in unique_keys
-    ]
-
-    existing = _find_plots_by_parcel(query_criteria) if query_criteria else []
-    existing_set = set(
-        (
-            e['properties']['provincia'],
-            e['properties']['municipio'],
-            e['properties']['parcela'],
-            e['properties']['recinto'],
-        )
-        for e in existing
-    )
-
-    no_duplicated_features = [
-        f for f, k in zip(features, keys) if k not in existing_set
-    ]
-
-    n_duplicates = len(features) - len(no_duplicated_features) if features else 0
-    print(f"🟡 Duplicates skipped: {n_duplicates}")
-    return no_duplicated_features
 
 #=====================================
 # EXCEPTIONS
