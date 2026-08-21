@@ -12,13 +12,12 @@ crops_family = {'citrus': ['khaki', 'orange', 'lemon', 'tangerine']}
 
 projects_folder = Path(r"C:\Users\Daniel\QField\cloud")
 
-def generate_base_gdf(project_names:list[str], target_crs:int=32630, mongo_samplers:list[str]=None, qfield_samplers:list[str]=None)-> gpd.GeoDataFrame:
+def generate_base_gdf(project_paths:list[str], target_crs:int=32630, mongo_samplers:list[str]=None, qfield_samplers:list[str]=None)-> gpd.GeoDataFrame:
     gdfs_list = []
-    for pn in project_names:
-        target_folder = projects_folder / pn
-        points_gdf = gpd.read_file(target_folder / 'Marcas.gpkg').to_crs(target_crs)
+    for pp in project_paths:
+        points_gdf = gpd.read_file(pp / 'Marcas.gpkg').to_crs(target_crs)
         points_gdf['n_samples'] =1
-        areas_gdf = gpd.read_file(target_folder / 'Marcas_area.gpkg').to_crs(target_crs)
+        areas_gdf = gpd.read_file(pp / 'Marcas_area.gpkg').to_crs(target_crs)
         areas_gdf['n_samples'] = (areas_gdf.geometry.area*FACTOR_INCLUSION/AREA_POR_ARBOL).round().astype(int)
 
         merged_gdf = pd.concat([areas_gdf, points_gdf]).reset_index(drop=True)
