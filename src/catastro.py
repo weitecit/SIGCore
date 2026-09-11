@@ -73,8 +73,13 @@ def polygonize_data(input_data:str|dict|pd.DataFrame)->tuple[gpd.GeoDataFrame,pd
             except Exception:
                 #add error log
                 print(f'Error: {prov:02} || {mun:03} not found')
-                munrows = df_input[(df_input['province']==prov) & (df_input['municipality']==mun)]
+                munrows = df_input[(df_input['province']==prov) & (df_input['municipality']==mun)].copy()
                 munrows['error'] = 'Municipality not found'
+                if 'enclosure' in munrows.columns:
+                    # Evita que una columna 'enclosure' de dtype float (por NaNs de otras filas
+                    # del lote) filtre valores tipo 1.0 al JSON de salida, que Go no puede
+                    # deserializar en un campo int.
+                    munrows['enclosure'] = munrows['enclosure'].apply(lambda v: int(v) if pd.notna(v) else None)
                 error_df = pd.concat([error_df, munrows], ignore_index=True)
                 continue
             #TODO: Si el archivo de municipio está corrupto lanza el error pyogrio.errors.DataSourceError. Se debe gestionar
@@ -83,11 +88,18 @@ def polygonize_data(input_data:str|dict|pd.DataFrame)->tuple[gpd.GeoDataFrame,pd
             plots_xls = df_input[(df_input['province']==prov) & (df_input['municipality']==mun)]
             #iterate, find coincidences and copy to out_data
             for i, plot in plots_xls.iterrows():
+                plot = plot.copy()
+                if 'enclosure' in df_input.columns:
+                    # Normaliza a int/None nativo: si otra fila del lote tiene el recinto
+                    # vacío, pandas sube toda la columna a float64 y aquí llegaría como 1.0
+                    # en vez de 1, lo que rompe el unmarshal a int en el cliente Go.
+                    plot['enclosure'] = int(plot['enclosure']) if not math.isnan(plot['enclosure']) else None
+
                 print(f'Prov: {prov:02} || Mun: {mun:03} || Pol: {plot["polygon"]} || Par: {plot["plot_number"]}', end=' ')
                 geometry = mun_data[(mun_data['poligono']==plot['polygon']) & (mun_data['parcela']==plot['plot_number'])]
 
                 if 'enclosure' in df_input.columns:
-                    if not math.isnan(plot['enclosure']):
+                    if plot['enclosure'] is not None:
                         geometry = geometry[geometry['recinto']==plot['enclosure']]
 
                 if 'field' in df_input.columns:
@@ -150,6 +162,11 @@ def polygonize_data_parallel(
 
     def _fetch_one(plot: pd.Series) -> tuple[gpd.GeoDataFrame | None, pd.Series]:
         enclosure = int(plot['enclosure']) if 'enclosure' in plot.index and not math.isnan(plot['enclosure']) else None
+        # Normaliza a int/None nativo en la Series: si otra fila del lote tiene el recinto
+        # vacío, pandas sube toda la columna 'enclosure' a float64, y esta fila (aunque
+        # tenga un recinto real) acabaría en error_df como 1.0 en vez de 1 -- lo que Go
+        # no puede deserializar en un campo int (json: cannot unmarshal number 1.0 ...).
+        plot['enclosure'] = enclosure
         start = time.monotonic()
         try:
             detected = _download_plot_file(
