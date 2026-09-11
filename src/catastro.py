@@ -1,5 +1,6 @@
 import os
 import math
+import time
 from concurrent.futures import ThreadPoolExecutor
 import pandas as pd
 import geopandas as gpd
@@ -148,21 +149,26 @@ def polygonize_data_parallel(
     error_df = pd.DataFrame(columns=df_input.columns)
 
     def _fetch_one(plot: pd.Series) -> tuple[gpd.GeoDataFrame | None, pd.Series]:
+        enclosure = int(plot['enclosure']) if 'enclosure' in plot.index and not math.isnan(plot['enclosure']) else None
+        start = time.monotonic()
         try:
             detected = _download_plot_file(
                 int(plot['province']),
                 int(plot['municipality']),
                 int(plot['polygon']),
                 int(plot['plot_number']),
-                int(plot['enclosure']) if 'enclosure' in plot.index and not math.isnan(plot['enclosure']) else None,
+                enclosure,
             )
+            elapsed = time.monotonic() - start
             print(
-                f'Prov: {plot["province"]} || Mun: {plot["municipality"]} || Pol: {plot["polygon"]} || Par: {plot["plot_number"]}',f'Found: {len(detected)} plots'
+                f'Prov: {plot["province"]} || Mun: {plot["municipality"]} || Pol: {plot["polygon"]} || Par: {plot["plot_number"]} || Rec: {enclosure}',
+                f'Found: {len(detected)} plots || {elapsed:.2f}s'
                 )
 
             return detected, plot
         except Exception as e:
-            print('Error downloading plot: ', e)
+            elapsed = time.monotonic() - start
+            print(f'Error downloading plot (Prov: {plot["province"]} || Mun: {plot["municipality"]} || Pol: {plot["polygon"]} || Par: {plot["plot_number"]} || Rec: {enclosure} || {elapsed:.2f}s): ', e)
             plot['error'] = str(e)
             return None, plot
 
@@ -280,7 +286,7 @@ def _download_plot_file(prov:int, mun:int, pol:int, par:int, rec:int=None)->gpd.
         r = requests.get(f'https://sigpac-hubcloud.es/servicioconsultassigpac/query/recinfoparc/{req_string}', timeout=15)
     else:
         req_string = f"{prov}/{mun}/0/0/{pol}/{par}/{rec}.geojson"
-        r = requests.get(f'https://sigpac-hubcloud.es/servicioconsultassigpac/query/recinfo/{req_string}')
+        r = requests.get(f'https://sigpac-hubcloud.es/servicioconsultassigpac/query/recinfo/{req_string}', timeout=15)
     if r.status_code != 200:
         raise KeyError(f'Error getting plot file {req_string}: {r.content}')
         
