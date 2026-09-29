@@ -300,10 +300,10 @@ def _adapt_columns(dataframe:pd.DataFrame)->pd.DataFrame:
 def _download_plot_file(prov:int, mun:int, pol:int, par:int, rec:int=None)->gpd.GeoDataFrame:
     if rec is None or math.isnan(rec):
         req_string = f"{prov}/{mun}/0/0/{pol}/{par}.geojson"
-        r = requests.get(f'https://sigpac-hubcloud.es/servicioconsultassigpac/query/recinfoparc/{req_string}', timeout=15)
+        r = requests.get(f'https://sigpac-hubcloud.es/servicioconsultassigpac/query/recinfoparc/{req_string}', timeout=(3, 8))
     else:
         req_string = f"{prov}/{mun}/0/0/{pol}/{par}/{rec}.geojson"
-        r = requests.get(f'https://sigpac-hubcloud.es/servicioconsultassigpac/query/recinfo/{req_string}', timeout=15)
+        r = requests.get(f'https://sigpac-hubcloud.es/servicioconsultassigpac/query/recinfo/{req_string}', timeout=(3, 8))
     if r.status_code != 200:
         raise KeyError(f'Error getting plot file {req_string}: {r.content}')
         
