@@ -100,7 +100,7 @@ jobs:
           APP_IMAGE_PORT: "8000"
           APP_MEMORY_LIMIT: "1Gi"
           APP_CPU_LIMIT: "1"
-          CR_TIMEOUT: "15"
+          CR_TIMEOUT: "300"
           CR_INGRESS_STATUS: "internal"
           CR_CONNECTOR_NAME: "projects/plataforma-agtech/locations/europe-west1/connectors/conector-sigcore-${{ vars.ENVIRONMENT }}"
           CR_APP_MAX_REQUEST_BYTES: "52428800"

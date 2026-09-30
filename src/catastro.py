@@ -1,5 +1,6 @@
 import os
 import math
+import time
 from concurrent.futures import ThreadPoolExecutor
 import pandas as pd
 import geopandas as gpd
@@ -72,8 +73,13 @@ def polygonize_data(input_data:str|dict|pd.DataFrame)->tuple[gpd.GeoDataFrame,pd
             except Exception:
                 #add error log
                 print(f'Error: {prov:02} || {mun:03} not found')
-                munrows = df_input[(df_input['province']==prov) & (df_input['municipality']==mun)]
+                munrows = df_input[(df_input['province']==prov) & (df_input['municipality']==mun)].copy()
                 munrows['error'] = 'Municipality not found'
+                if 'enclosure' in munrows.columns:
+                    # Evita que una columna 'enclosure' de dtype float (por NaNs de otras filas
+                    # del lote) filtre valores tipo 1.0 al JSON de salida, que Go no puede
+                    # deserializar en un campo int.
+                    munrows['enclosure'] = munrows['enclosure'].apply(lambda v: int(v) if pd.notna(v) else None)
                 error_df = pd.concat([error_df, munrows], ignore_index=True)
                 continue
             #TODO: Si el archivo de municipio está corrupto lanza el error pyogrio.errors.DataSourceError. Se debe gestionar
@@ -82,11 +88,18 @@ def polygonize_data(input_data:str|dict|pd.DataFrame)->tuple[gpd.GeoDataFrame,pd
             plots_xls = df_input[(df_input['province']==prov) & (df_input['municipality']==mun)]
             #iterate, find coincidences and copy to out_data
             for i, plot in plots_xls.iterrows():
+                plot = plot.copy()
+                if 'enclosure' in df_input.columns:
+                    # Normaliza a int/None nativo: si otra fila del lote tiene el recinto
+                    # vacío, pandas sube toda la columna a float64 y aquí llegaría como 1.0
+                    # en vez de 1, lo que rompe el unmarshal a int en el cliente Go.
+                    plot['enclosure'] = int(plot['enclosure']) if not math.isnan(plot['enclosure']) else None
+
                 print(f'Prov: {prov:02} || Mun: {mun:03} || Pol: {plot["polygon"]} || Par: {plot["plot_number"]}', end=' ')
                 geometry = mun_data[(mun_data['poligono']==plot['polygon']) & (mun_data['parcela']==plot['plot_number'])]
 
                 if 'enclosure' in df_input.columns:
-                    if not math.isnan(plot['enclosure']):
+                    if plot['enclosure'] is not None:
                         geometry = geometry[geometry['recinto']==plot['enclosure']]
 
                 if 'field' in df_input.columns:
@@ -147,59 +160,79 @@ def polygonize_data_parallel(
     out_data = gpd.GeoDataFrame()
     error_df = pd.DataFrame(columns=df_input.columns)
 
-    def _fetch_one(plot: pd.Series) -> tuple[gpd.GeoDataFrame | None, pd.Series]:
+    # Varias filas del mismo lote suelen compartir parcela (prov/mun/pol/par) y solo
+    # difieren en el recinto. recinfoparc devuelve TODOS los recintos de una parcela
+    # en una sola petición, así que agrupamos por parcela para no golpear sigpac-hubcloud
+    # con una petición por fila -- eso es lo que la satura y dispara los "Max retries
+    # exceeded" con parcelarios grandes (p.ej. 319 filas -> solo ~64 parcelas únicas).
+    parcela_keys = {
+        (int(row['province']), int(row['municipality']), int(row['polygon']), int(row['plot_number']))
+        for _, row in df_input.iterrows()
+    }
+
+    def _fetch_parcela(key: tuple[int, int, int, int]) -> tuple[tuple[int, int, int, int], gpd.GeoDataFrame | None, str | None]:
+        prov, mun, pol, par = key
+        start = time.monotonic()
         try:
-            detected = _download_plot_file(
-                int(plot['province']),
-                int(plot['municipality']),
-                int(plot['polygon']),
-                int(plot['plot_number']),
-                int(plot['enclosure']) if 'enclosure' in plot.index and not math.isnan(plot['enclosure']) else None,
-            )
-            print(
-                f'Prov: {plot["province"]} || Mun: {plot["municipality"]} || Pol: {plot["polygon"]} || Par: {plot["plot_number"]}',f'Found: {len(detected)} plots'
-                )
-
-            return detected, plot
+            detected = _download_parcela_file(prov, mun, pol, par)
+            elapsed = time.monotonic() - start
+            print(f'Prov: {prov} || Mun: {mun} || Pol: {pol} || Par: {par}', f'Found: {len(detected)} recintos || {elapsed:.2f}s')
+            return key, detected, None
         except Exception as e:
-            print('Error downloading plot: ', e)
-            plot['error'] = str(e)
-            return None, plot
+            elapsed = time.monotonic() - start
+            print(f'Error downloading parcela (Prov: {prov} || Mun: {mun} || Pol: {pol} || Par: {par} || {elapsed:.2f}s): ', e)
+            return key, None, str(e)
 
+    parcela_cache: dict[tuple[int, int, int, int], tuple[gpd.GeoDataFrame | None, str | None]] = {}
     with ThreadPoolExecutor(max_workers=max_workers) as ex:
-        futures = [ex.submit(_fetch_one, plot.copy()) for _, plot in df_input.iterrows()]
-        for fut in futures:
-            detected_plots, plot = fut.result()
+        for key, detected, error in ex.map(_fetch_parcela, parcela_keys):
+            parcela_cache[key] = (detected, error)
 
-            if detected_plots is None:
-                #Error while finding enclosure
-                error_df = pd.concat([error_df, plot.to_frame().T])
-                continue
+    for _, plot in df_input.iterrows():
+        plot = plot.copy()
+        enclosure = int(plot['enclosure']) if 'enclosure' in plot.index and not math.isnan(plot['enclosure']) else None
+        # Normaliza a int/None nativo: si otra fila del lote tiene el recinto vacío,
+        # pandas sube toda la columna 'enclosure' a float64, y esta fila (aunque tenga
+        # un recinto real) acabaría en error_df como 1.0 en vez de 1 -- lo que Go no
+        # puede deserializar en un campo int (json: cannot unmarshal number 1.0 ...).
+        plot['enclosure'] = enclosure
 
-            if detected_plots.empty:
-                plot['error'] = 'NOT FOUND'
-                error_df = pd.concat([error_df, plot.to_frame().T])
-                continue
+        key = (int(plot['province']), int(plot['municipality']), int(plot['polygon']), int(plot['plot_number']))
+        parcela_gdf, error = parcela_cache[key]
 
-            if 'field' in df_input.columns:
-                detected_plots['field'] = plot['field']
-            if 'client' in df_input.columns:
-                detected_plots['client'] = plot['client']
-            if 'crop' in df_input.columns:
-                detected_plots['crop'] = plot['crop']
-            if 'operating' in df_input.columns:
-                detected_plots['operating'] = bool(plot['operating'])
-            if 'cadastral_ref' in df_input.columns:
-                detected_plots['cadastral_ref'] = plot['cadastral_ref']
+        if parcela_gdf is None:
+            plot['error'] = error
+            error_df = pd.concat([error_df, plot.to_frame().T])
+            continue
 
-            if out_data.empty: out_data = detected_plots
-            else: out_data = pd.concat([out_data, detected_plots])
+        detected_plots = parcela_gdf if enclosure is None else parcela_gdf[parcela_gdf['recinto'] == enclosure]
+
+        if detected_plots.empty:
+            plot['error'] = 'NOT FOUND'
+            error_df = pd.concat([error_df, plot.to_frame().T])
+            continue
+
+        detected_plots = detected_plots.copy()
+        if 'field' in df_input.columns:
+            detected_plots['field'] = plot['field']
+        if 'client' in df_input.columns:
+            detected_plots['client'] = plot['client']
+        if 'crop' in df_input.columns:
+            detected_plots['crop'] = plot['crop']
+        if 'operating' in df_input.columns:
+            detected_plots['operating'] = bool(plot['operating'])
+        if 'cadastral_ref' in df_input.columns:
+            detected_plots['cadastral_ref'] = plot['cadastral_ref']
+
+        if out_data.empty: out_data = detected_plots
+        else: out_data = pd.concat([out_data, detected_plots])
     
     out_data.drop_duplicates(subset=['geometry'], inplace=True)
 
     print('DONE!')
-    if len(out_data) > 0 and 'field' in out_data.columns:
-        print('Fields detected: ', len(out_data['field'].unique()), out_data['field'].unique())
+    if len(out_data) > 0:
+        if 'field' in out_data.columns:
+            print('Fields detected: ', len(out_data['field'].unique()), out_data['field'].unique())
         if out_data.crs is None:
             out_data = out_data.set_crs('EPSG:4258')
         else:
@@ -276,10 +309,10 @@ def _adapt_columns(dataframe:pd.DataFrame)->pd.DataFrame:
 def _download_plot_file(prov:int, mun:int, pol:int, par:int, rec:int=None)->gpd.GeoDataFrame:
     if rec is None or math.isnan(rec):
         req_string = f"{prov}/{mun}/0/0/{pol}/{par}.geojson"
-        r = requests.get(f'https://sigpac-hubcloud.es/servicioconsultassigpac/query/recinfoparc/{req_string}', timeout=15)
+        r = requests.get(f'https://sigpac-hubcloud.es/servicioconsultassigpac/query/recinfoparc/{req_string}', timeout=(3, 8))
     else:
         req_string = f"{prov}/{mun}/0/0/{pol}/{par}/{rec}.geojson"
-        r = requests.get(f'https://sigpac-hubcloud.es/servicioconsultassigpac/query/recinfo/{req_string}')
+        r = requests.get(f'https://sigpac-hubcloud.es/servicioconsultassigpac/query/recinfo/{req_string}', timeout=(3, 8))
     if r.status_code != 200:
         raise KeyError(f'Error getting plot file {req_string}: {r.content}')
         
@@ -290,6 +323,30 @@ def _download_plot_file(prov:int, mun:int, pol:int, par:int, rec:int=None)->gpd.
     gdf.rename(columns={'superficie': 'dn_surface'}, inplace=True)
     gdf['dn_surface'] = gdf['dn_surface'] * 10000
     return gdf
+
+def _download_parcela_file(prov:int, mun:int, pol:int, par:int, retries:int=2)->gpd.GeoDataFrame:
+    req_string = f"{prov}/{mun}/0/0/{pol}/{par}.geojson"
+    url = f'https://sigpac-hubcloud.es/servicioconsultassigpac/query/recinfoparc/{req_string}'
+
+    last_error: Exception | None = None
+    for attempt in range(retries):
+        try:
+            r = requests.get(url, timeout=(3, 8))
+            if r.status_code != 200:
+                raise KeyError(f'Error getting plot file {req_string}: {r.content}')
+
+            gdf = gpd.GeoDataFrame.from_features(r.json()['features'])
+            if gdf.empty:
+                raise ValueError(f'Plot file {req_string} not found')
+            #ha to m2
+            gdf.rename(columns={'superficie': 'dn_surface'}, inplace=True)
+            gdf['dn_surface'] = gdf['dn_surface'] * 10000
+            return gdf
+        except (requests.ConnectionError, requests.Timeout) as e:
+            last_error = e
+            if attempt < retries - 1:
+                time.sleep(1)
+    raise last_error
 
 def _find_mun_file(prov:int, mun:int):
     all_dirs = os.listdir(PROVINCES_FOLDER)

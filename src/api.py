@@ -3,6 +3,7 @@ API module for SIGCore.
 """
 #EXTERNAL IMPORTS
 from contextlib import asynccontextmanager
+import asyncio
 import logging
 import json
 from fastapi import FastAPI, Request
@@ -70,7 +71,7 @@ async def polygonize_plots(request:Request):
     try:
         json_data = await request.json()
         plots_array = json_data['plots']
-        main_gdf, error_df = catastro.polygonize_data_parallel(plots_array)
+        main_gdf, error_df = await asyncio.to_thread(catastro.polygonize_data_parallel, plots_array)
 
         if not main_gdf.empty:
             return JSONResponse(
@@ -98,7 +99,7 @@ async def polygonize_plots(request:Request):
     try:
         json_data = await request.json()
         plots_array = json_data['plots']
-        main_gdf, error_df = catastro.polygonize_data(plots_array)
+        main_gdf, error_df = await asyncio.to_thread(catastro.polygonize_data, plots_array)
 
         if not main_gdf.empty:
             return JSONResponse(

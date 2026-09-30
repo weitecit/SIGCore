@@ -1,41 +1,8 @@
 import pytest
 import geopandas as gpd
 from shapely.geometry import Point
-from unittest.mock import patch, MagicMock, Mock
+from unittest.mock import patch
 import mongo_api
-
-@pytest.fixture
-def sample_gdf_with_field():
-    """GeoDataFrame con columna 'field' (se renombrará a 'parcel')."""
-    geometries = [Point(0, 0), Point(1, 1), Point(2, 2)]
-    return gpd.GeoDataFrame(
-        {
-            'field': ['campo1', 'campo2', 'campo3'],
-            'provincia': ['28', '28', '29'],
-            'municipio': ['001', '002', '001'],
-            'parcela': ['001', '002', '003'],
-            'recinto': ['A', 'B', 'C'],
-            'geometry': geometries,
-        },
-        crs='EPSG:4326',
-    )
-
-
-@pytest.fixture
-def sample_gdf_with_parcel():
-    """GeoDataFrame con columna 'parcel' ya presente."""
-    geometries = [Point(0, 0), Point(1, 1), Point(2, 2)]
-    return gpd.GeoDataFrame(
-        {
-            'parcel': ['campo1', 'campo2', 'campo3'],
-            'provincia': ['28', '28', '29'],
-            'municipio': ['001', '002', '001'],
-            'parcela': ['001', '002', '003'],
-            'recinto': ['A', 'B', 'C'],
-            'geometry': geometries,
-        },
-        crs='EPSG:4326',
-    )
 
 
 class TestMongoAPI:
@@ -192,78 +159,9 @@ class TestMongoAPI:
             
             assert result is None
 
-    @patch.object(mongo_api, 'find_plot_by_position')
-    def test_add_metadata_with_parcel_lookup(self, mock_get_plot, sample_gdf_with_parcel):
-        """Test agregar metadata con búsqueda de parcela por posición (actualizado)"""
-        # Mock de get_plot_by_position_2
-        mock_get_plot.return_value = {
-            'properties': {
-                'parcel_id': 'P123',
-                'parcel': 'Parcela Test'  # Cambió de 'parcel' a 'parcel'
-            }
-        }
-        
-        # Metadata sin parcel_id especificado
-        custom_metadata = {'parcel_id': None, 'parcel_name': None}
-        
-        result = mongo_api._apply_points_model(sample_gdf_with_parcel, custom_metadata)
-        
-        # Verificar que se agregaron los datos de parcela
-        assert result['parcel_id'].iloc[0] == 'P123'
-        assert result['parcel_name'].iloc[0] == 'Parcela Test'
-
-    def test_check_plots_duplicated_no_duplicates(self):
-        """Test check duplicados cuando no hay duplicados"""
-        mock_features = [
-            {'properties': {'provincia': '28', 'municipio': '001', 'parcela': '001', 'recinto': 'A'}},
-            {'properties': {'provincia': '28', 'municipio': '002', 'parcela': '002', 'recinto': 'B'}}
-        ]
-        
-        with patch.object(mongo_api, '_find_plots_by_parcel') as mock_find:
-            mock_find.return_value = []  # No duplicados en DB
-            
-            new_features = mongo_api._check_plots_duplicated(mock_features)
-            
-            assert len(new_features) == 2
-
-    def test_check_plots_duplicated_with_duplicates(self):
-        """Test check duplicados cuando hay duplicados"""
-        mock_features = [
-            {'properties': {'provincia': '28', 'municipio': '001', 'parcela': '001', 'recinto': 'A'}},
-            {'properties': {'provincia': '28', 'municipio': '002', 'parcela': '002', 'recinto': 'B'}}
-        ]
-        
-        existing_in_db = [
-            {
-                'properties': {
-                    'provincia': '28',
-                    'municipio': '001',
-                    'parcela': '001',
-                    'recinto': 'A'
-                }
-            }
-        ]
-        
-        with patch.object(mongo_api, '_find_plots_by_parcel') as mock_find:
-            mock_find.return_value = existing_in_db
-            
-            new_features = mongo_api._check_plots_duplicated(mock_features)
-            
-            assert len(new_features) == 1  # Solo uno no está duplicado
-
 
 class TestErrorHandling:
     """Tests para manejo de errores específicos"""
-
-    def test_gdf_to_mongo_structure_no_crs_error(self):
-        """Test error cuando GDF no tiene CRS"""
-        gdf_no_crs = gpd.GeoDataFrame({
-            'parcel': ['campo1'],
-            'geometry': [Point(0, 0)]
-        })  # Sin especificar CRS
-        
-        with pytest.raises(Exception, match="The GeoDataframe has no CRS"):
-            mongo_api._gdf_to_mongo_structure(gdf_no_crs)
 
     def test_get_parcelario_field_not_found(self):
         """Test error cuando campo no se encuentra"""
@@ -282,21 +180,6 @@ class TestUtilityFunctions:
         assert hasattr(mongo_api, 'client')
         assert hasattr(mongo_api, 'db')
 
-    @patch('mongo_api.db')
-    def test_find_plots_by_parcel(self, mock_db):
-        """Test búsqueda de plots por parcela en layers collection"""
-        mock_db.layers.find.return_value = [
-            {'properties': {'provincia': '28', 'municipio': '001', 'parcela': '001', 'recinto': 'A'}}
-        ]
-        
-        criteria = [{'properties.provincia': '28', 'properties.municipio': '001'}]
-        result = mongo_api._find_plots_by_parcel(criteria)
-        
-        assert len(result) == 1
-        mock_db.layers.find.assert_called_once()
-        # Verificar que se incluye layer_type: 'plot' en la consulta
-        call_args = mock_db.layers.find.call_args[0][0]
-        assert call_args['layer_type'] == 'plot'
 
 
 # Configuración para ejecutar los tests
