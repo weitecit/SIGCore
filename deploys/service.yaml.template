@@ -8,6 +8,11 @@ metadata:
     run.googleapis.com/urls: '["https://${CR_SERVICE_NAME}-${GCP_PROJECT_ID}.${GCP_REGION}.run.app"]'
   labels:
     cloud.googleapis.com/location: "${GCP_REGION}"
+    # Etiquetas de coste (FinOps): permiten ver el gasto por entorno y servicio en el export de facturación.
+    # `services replace` sustituye el servicio entero, así que hay que declararlas aquí o se pierden en cada despliegue.
+    env: "${CR_LABEL_ENV}"
+    app: sigcore
+    owner: it
   name: "${CR_SERVICE_NAME}"
   namespace: "${GCP_PROJECT_ID}"
 

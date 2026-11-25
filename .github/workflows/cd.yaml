@@ -105,6 +105,7 @@ jobs:
           # Direct VPC egress: red y subred por entorno (la subred debe existir antes de desplegar).
           CR_VPC_NETWORK: "sigcore-${{ vars.ENVIRONMENT }}"
           CR_VPC_SUBNET: "subred-sigcore-${{ vars.ENVIRONMENT }}-direct"
+          CR_LABEL_ENV: "${{ vars.ENVIRONMENT }}"
           CR_APP_MAX_REQUEST_BYTES: "52428800"
           CR_MAX_SCALE: "1"
           CR_APP_STARTUP_TIMEOUT: "240"
