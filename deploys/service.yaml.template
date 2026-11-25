@@ -18,7 +18,9 @@ spec:
         autoscaling.knative.dev/maxScale: "${CR_MAX_SCALE}"
         run.googleapis.com/client-name: "gcloud"
         run.googleapis.com/startup-cpu-boost: 'true'
-        run.googleapis.com/vpc-access-connector: "${CR_CONNECTOR_NAME}"
+        # Direct VPC egress: sin conector Serverless VPC Access (ahorra ~12 EUR/mes por conector).
+        # La IP de salida sigue siendo la del Cloud NAT de la red, así que no cambia para Mongo Atlas.
+        run.googleapis.com/network-interfaces: '[{"network":"${CR_VPC_NETWORK}","subnetwork":"${CR_VPC_SUBNET}"}]'
         run.googleapis.com/vpc-access-egress: "all-traffic"
       labels:
         client.knative.dev/nonce: adsfgxblvo

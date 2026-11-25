@@ -102,7 +102,9 @@ jobs:
           APP_CPU_LIMIT: "1"
           CR_TIMEOUT: "300"
           CR_INGRESS_STATUS: "internal"
-          CR_CONNECTOR_NAME: "projects/plataforma-agtech/locations/europe-west1/connectors/conector-sigcore-${{ vars.ENVIRONMENT }}"
+          # Direct VPC egress: red y subred por entorno (la subred debe existir antes de desplegar).
+          CR_VPC_NETWORK: "sigcore-${{ vars.ENVIRONMENT }}"
+          CR_VPC_SUBNET: "subred-sigcore-${{ vars.ENVIRONMENT }}-direct"
           CR_APP_MAX_REQUEST_BYTES: "52428800"
           CR_MAX_SCALE: "1"
           CR_APP_STARTUP_TIMEOUT: "240"
