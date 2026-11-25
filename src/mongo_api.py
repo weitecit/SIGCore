@@ -228,7 +228,13 @@ def _mongo_to_gdf(features:list[dict])->gpd.GeoDataFrame:
         }
         for f in features
     ]
-    geometries = [shape(f['geometry']) for f in features]
+    geometries = []
+    for f in features:
+        try:
+            geometries.append(shape(f['geometry']))
+        except Exception as e:
+            print(f"Error occurred while processing geometry for feature {f.get('_id')}: {e}")
+            geometries.append(None)
     gdf = gpd.GeoDataFrame(properties_list, geometry=geometries, crs = 4326)
     return gdf
 
